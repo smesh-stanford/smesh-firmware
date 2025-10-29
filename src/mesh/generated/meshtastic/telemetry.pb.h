@@ -101,7 +101,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* SEN5X PM SENSORS */
     meshtastic_TelemetrySensorType_SEN5X = 43,
     /* TSL2561 light sensor */
-    meshtastic_TelemetrySensorType_TSL2561 = 44
+    meshtastic_TelemetrySensorType_TSL2561 = 44,
+    /* AS5600 wind speed sensor*/
+    meshtastic_TelemetrySensorType_AS5600 = 45
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */

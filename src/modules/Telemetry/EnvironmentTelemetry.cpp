@@ -206,6 +206,13 @@ TSL2561Sensor tsl2561Sensor;
 NullSensor tsl2561Sensor;
 #endif
 
+#if __has_include(<AS5600.h>)
+#include "Sensor/AS5600Sensor.h"
+AS5600Sensor as5600Sensor;
+#else
+NullSensor as5600Sensor;
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 

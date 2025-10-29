@@ -205,6 +205,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
+// TODO: come back, I am unsure of what the I2C address is but I am pretty sure it's 0x36
+#define AS5600_ADDR 0x36
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

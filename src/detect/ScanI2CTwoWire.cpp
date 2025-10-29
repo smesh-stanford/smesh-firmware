@@ -479,7 +479,28 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
+            case MAX1704X_ADDR: // 0x36 - could be AS5600 or MAX1704X
+
+                // TODO: we could alternatively just remove MAX1704X support if not needed (it's a fuel gauge!)
+                // Check if it's an AS5600 magnetic encoder by reading the status register
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0B), 1); // STATUS register
+
+                // AS5600 status register should not have all magnitude bits set (invalid magnet state)
+                if ((registerValue & 0x38) != 0x38) { // Check if MD, ML, MH bits are not all set
+
+                    // Try reading CONF register to further verify AS5600
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2); // CONF register
+                    if ((registerValue & 0x0003) <= 0x0003) { // Valid power mode setting (0-3)
+                        type = AS5600;
+                        logFoundDevice("AS5600", (uint8_t)addr.address);
+                        break;
+                    }
+                }
+                // If not AS5600, assume it's MAX1704X (existing behavior)
+                type = MAX17048;
+                logFoundDevice("MAX17048", (uint8_t)addr.address);
+                break;
+
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
