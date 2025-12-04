@@ -9,7 +9,7 @@
 
 #include <assert.h>
 
-#include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
+#include "modules/Telemetry/Sensor/SMeshWindSensor.h"
 #include "modules/Telemetry/UnitConversions.h"
 
 #include <string>

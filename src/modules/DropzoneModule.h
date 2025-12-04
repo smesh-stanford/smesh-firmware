@@ -1,7 +1,7 @@
 #pragma once
 #if !MESHTASTIC_EXCLUDE_DROPZONE
 #include "SinglePortModule.h"
-#include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
+#include "modules/Telemetry/Sensor/SMeshWindSensor.h"
 
 /**
  * An example module that replies to a message with the current conditions
@@ -9,7 +9,7 @@
  */
 class DropzoneModule : public SinglePortModule, private concurrency::OSThread
 {
-    DFRobotLarkSensor sensor;
+    SMeshWindSensor sensor;
 
   public:
     /** Constructor

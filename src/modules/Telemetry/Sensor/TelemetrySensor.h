@@ -59,6 +59,9 @@ class TelemetrySensor
     // TODO: delete after migration
     bool hasSensor() { return nodeTelemetrySensorsMap[sensorType].first > 0; }
 
+    const char *getSensorName() const { return sensorName; }
+    meshtastic_TelemetrySensorType getSensorType() const { return sensorType; }
+
 #if WIRE_INTERFACES_COUNT > 1
     // Set to true if Implementation only works first I2C port (Wire)
     virtual bool onlyWire1() { return false; }

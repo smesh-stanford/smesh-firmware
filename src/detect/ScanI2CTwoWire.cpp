@@ -156,8 +156,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         if (asize != 0) {
             if (!in_array(address, asize, (uint8_t)addr.address))
                 continue;
-            LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         }
+        LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         err = 2;
@@ -174,6 +174,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
         type = NONE;
         if (err == 0) {
+            LOG_DEBUG("Device found at address 0x%x", (uint8_t)addr.address);
             switch (addr.address) {
             case SSD1306_ADDRESS:
                 type = probeOLED(addr);
@@ -292,7 +293,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     break;
                 }
                 break;
-#ifndef HAS_NCP5623
+            SCAN_SIMPLE_CASE(SMesh_WIND_VANE_ADDR, AS5600, "SMesh Wind Sensor", (uint8_t)addr.address) 
+        #ifndef HAS_NCP5623
             case AHT10_ADDR:
                 logFoundDevice("AHT10", (uint8_t)addr.address);
                 type = AHT10;
@@ -321,7 +323,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case INA3221_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
+                            registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
                 if (registerValue == 0x5449) {
                     logFoundDevice("INA3221", (uint8_t)addr.address);
@@ -465,7 +467,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address); // VEML7700 is not defined?
             case TCA9555_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 1);
                 if (registerValue == 0x13) {
@@ -495,28 +497,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
-            case MAX1704X_ADDR: // 0x36 - could be AS5600 or MAX1704X
-
-                // TODO: we could alternatively just remove MAX1704X support if not needed (it's a fuel gauge!)
-                // Check if it's an AS5600 magnetic encoder by reading the status register
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0B), 1); // STATUS register
-
-                // AS5600 status register should not have all magnitude bits set (invalid magnet state)
-                if ((registerValue & 0x38) != 0x38) { // Check if MD, ML, MH bits are not all set
-
-                    // Try reading CONF register to further verify AS5600
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2); // CONF register
-                    if ((registerValue & 0x0003) <= 0x0003) { // Valid power mode setting (0-3)
-                        type = AS5600;
-                        logFoundDevice("AS5600", (uint8_t)addr.address);
-                        break;
-                    }
-                }
-                // If not AS5600, assume it's MAX1704X (existing behavior)
-                type = MAX17048;
-                logFoundDevice("MAX17048", (uint8_t)addr.address);
-                break;
-
+                SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
@@ -558,7 +539,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
 #endif
-
             case MLX90614_ADDR_DEF:
                 // Do we have the MLX90614 or the MPR121KB or the CST226SE
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x06), 1);

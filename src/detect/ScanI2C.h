@@ -83,7 +83,7 @@ class ScanI2C
         BMM150,
         TSL2561,
         DRV2605,
-        AS5600,
+        AS5600,  // SMesh Wind Sensor (AS5600 + GPIO counter)
         BH1750,
         DA217,
         CHSC6X,
