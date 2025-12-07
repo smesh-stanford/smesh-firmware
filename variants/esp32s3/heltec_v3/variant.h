@@ -20,6 +20,8 @@
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
 
+#define GPIO_WIND_COUNTER 33 // Wind speed pulse counter input
+
 #define USE_SX1262
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
