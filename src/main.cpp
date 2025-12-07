@@ -45,6 +45,7 @@ PCA9557 io(0x18, &Wire);
 
 #ifdef ARCH_ESP32
 #include "freertosinc.h"
+#include "driver/pcnt.h" // Pulse counter for wind speed sensor
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif
@@ -204,6 +205,8 @@ ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 /// The I2C address of our Air Quality Indicator (if found)
 ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
+// The I2C address of our SMesh Wind Vane Sensor (if found)
+ScanI2C::DeviceAddress SMESH_WIND_VANE_found = ScanI2C::ADDRESS_NONE;
 
 #if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
 Adafruit_DRV2605 drv;
@@ -746,8 +749,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::TSL2561, meshtastic_TelemetrySensorType_TSL2561);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::AS5600, meshtastic_TelemetrySensorType_AS5600);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::AS5600, meshtastic_TelemetrySensorType_SMESH_WIND_VANE);
 
 #endif
 
@@ -881,7 +883,7 @@ void setup()
 #if HAS_SCREEN
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
+        #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS) ||              \
     defined(USE_SPISSD1306) || defined(USE_ST7796) || defined(HACKADAY_COMMUNICATOR)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);

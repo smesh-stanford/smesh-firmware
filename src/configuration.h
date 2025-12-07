@@ -204,7 +204,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define INA_ADDR_ALTERNATE 0x41
 #define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
-#define MAX1704X_ADDR 0x36
 #define QMC6310_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
 #define QMC5883L_ADDR 0x0D
@@ -236,8 +235,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
 #define LTR553ALS_ADDR 0x23
-// TODO: come back, I am unsure of what the I2C address is but I am pretty sure it's 0x36
-#define AS5600_ADDR 0x36
+
+#define MAX1704X_ADDR 0x33
+#define SMesh_WIND_VANE_ADDR 0x36  // AS5600 wind direction sensor
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
