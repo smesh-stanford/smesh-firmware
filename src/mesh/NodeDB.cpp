@@ -200,7 +200,6 @@ NodeDB::NodeDB()
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
     uint32_t nodeDatabaseCRC = crc32Buffer(&nodeDatabase, sizeof(nodeDatabase));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
-    // uint32_t moduleConfigCRC = crc32Buffer(&moduleConfig, sizeof(moduleConfig));
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
@@ -443,16 +442,6 @@ NodeDB::NodeDB()
     // saved config was loaded from flash or defaults were installed.
     initConfigIntervals();
     initModuleConfigIntervals();
-
-    // Recompute CRCs for config/moduleConfig in case compile-time userprefs altered them
-    // uint32_t newConfigCRC = crc32Buffer(&config, sizeof(config));
-    // if (newConfigCRC != configCRC) {
-    //     saveWhat |= SEGMENT_CONFIG;
-    // }
-    // uint32_t newModuleConfigCRC = crc32Buffer(&moduleConfig, sizeof(moduleConfig));
-    // if (newModuleConfigCRC != moduleConfigCRC) {
-    //     saveWhat |= SEGMENT_MODULECONFIG;
-    // }
 
 #ifdef USERPREFS_FIRMWARE_EDITION_SMESH
     LOG_INFO("SMESH Build Tag: SMESH=%d build=%d", USERPREFS_FIRMWARE_EDITION_SMESH, USERPREFS_BUILD_NUMBER);
