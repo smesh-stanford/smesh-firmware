@@ -50,7 +50,11 @@ int32_t AirQualityTelemetryModule::runOnce()
             digitalWrite(PMSA003I_ENABLE_PIN, LOW);
 #endif /* PMSA003I_ENABLE_PIN */
 
+#if defined(I2C_SDA1)
+            if (!aqi.begin_I2C(&Wire1)) {
+#else
             if (!aqi.begin_I2C()) {
+#endif
 #ifndef I2C_NO_RESCAN
                 LOG_WARN("Could not establish i2c connection to AQI sensor. Rescan");
                 // rescan for late arriving sensors. AQI Module starts about 10 seconds into the boot so this is plenty.
