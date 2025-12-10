@@ -32,7 +32,7 @@ Meshtastic enables text messaging, location sharing, and telemetry over a decent
 ## Config setup
 Upon boot, the firmware has SMesh's custom configuration set in `userprefs_defaults.h`. This sets things like enabling environmental sensors, etc. and is baked into the firmware.
 
->![WARNING] 
+>[!WARNING] 
 >These settings are only applied upon upload AND THEN hitting the reset button on the meshtastic. Currently, meshtastic has a bug that seems to not detect sensors like the PMSA and update your preferences until a reset is performed.
 
 ### Get Started
