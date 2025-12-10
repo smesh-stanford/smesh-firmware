@@ -197,7 +197,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 #if __has_include(<Adafruit_AS5600.h>)
-    // SMesh Wind Sensor (AS5600 + GPIO counter) - uses DFRobot library
+    // SMesh Wind Sensor (AS5600 + GPIO counter)
     addSensor<SMeshWindSensor>(i2cScanner, ScanI2C::DeviceType::AS5600);
 #endif
 #if __has_include(<DFRobot_RainfallSensor.h>)
@@ -428,7 +428,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     // Check if any telemetry field has valid data
     bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.iaq != 0 || m.voltage != 0 ||
-                  m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
+                  m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0 ||
+                  m.wind_direction != 0 || m.wind_speed != 0;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -481,8 +482,13 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
             aqi += " (Hazardous)";
             bannerMsg = "Hazardous IAQ";
         }
-
         entries.push_back(aqi);
+
+        if (m.wind_direction != 0 && m.wind_speed != 0) {
+            String windStr = "Wind: " + String(m.wind_speed, 1) + "m/s ";
+            windStr += "(" + String(m.wind_direction, 3) + ")";
+            entries.push_back(windStr);
+        }
 
         // === IAQ alert logic ===
         static uint32_t lastAlertTime = 0;
