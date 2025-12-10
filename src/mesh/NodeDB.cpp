@@ -403,7 +403,7 @@ NodeDB::NodeDB()
         config.position.gps_enabled = 0;
     }
 #ifdef USERPREFS_FIRMWARE_EDITION
-    myNodeInfo.firmware_edition = SMESHPREFS_FIRMWARE_EDITION;
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
 #endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
@@ -443,8 +443,8 @@ NodeDB::NodeDB()
     initConfigIntervals();
     initModuleConfigIntervals();
 
-#ifdef SMESHPREFS_FIRMWARE_EDITION_SMESH
-    LOG_INFO("SMESH Build Tag: SMESH=%d build=%d", SMESHPREFS_FIRMWARE_EDITION_SMESH, SMESHPREFS_BUILD_NUMBER);
+#ifdef USERPREFS_FIRMWARE_EDITION_SMESH
+    LOG_INFO("SMESH Build Tag: SMESH=%d build=%d", USERPREFS_FIRMWARE_EDITION_SMESH, USERPREFS_BUILD_NUMBER);
 #endif
 
     LOG_INFO("Effective config: bluetooth.enabled=%d fixed_pin=%u mode=%d serial_enabled=%d",
