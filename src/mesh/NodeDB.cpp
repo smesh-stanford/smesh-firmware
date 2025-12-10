@@ -768,6 +768,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.wifi_psk, USERPREFS_NETWORK_WIFI_PSK, sizeof(config.network.wifi_psk));
 #endif
 
+config.power.ls_secs = default_ls_secs;
+config.power.min_wake_secs = default_min_wake_secs;
+
 // Optional build-time LoRa overrides
 #ifdef USERPREFS_LORACONFIG_FREQUENCY_OFFSET
     config.lora.frequency_offset = USERPREFS_LORACONFIG_FREQUENCY_OFFSET;
@@ -822,7 +825,13 @@ void NodeDB::initConfigIntervals()
 #else
     config.position.gps_update_interval = default_gps_update_interval;
 #endif
-// #ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
+
+#ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
+    config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
+#else
+    config.position.position_broadcast_secs = default_broadcast_interval_secs;
+#endif
+
 // Environment telemetry
 #ifdef USERPREFS_ENVIRONMENT_MEASUREMENT_ENABLED
     moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_ENVIRONMENT_MEASUREMENT_ENABLED;
@@ -836,7 +845,7 @@ void NodeDB::initConfigIntervals()
     moduleConfig.telemetry.environment_update_interval = 0;
 #endif
 
-    // Air quality telemetry
+// Air quality telemetry
 #ifdef USERPREFS_AIR_QUALITY_ENABLED
     moduleConfig.telemetry.air_quality_enabled = USERPREFS_AIR_QUALITY_ENABLED;
 #else
@@ -870,7 +879,6 @@ void NodeDB::initConfigIntervals()
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
 #endif
-// #endif // USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
 
 }
 
