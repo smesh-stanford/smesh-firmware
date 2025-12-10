@@ -36,6 +36,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /* Offer chance for variant-specific defines */
 #include "variant.h"
 
+// Build-time user preference defaults (optional). Define values here to hardcode
+// selected userPrefs into the firmware build.
+#include "userprefs_defaults.h"
+
 // -----------------------------------------------------------------------------
 // Display feature overrides
 // -----------------------------------------------------------------------------

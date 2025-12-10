@@ -28,7 +28,9 @@ int32_t AirQualityTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.telemetry.air_quality_enabled = 1;
+    // Set the interval for air quality telemetry measurements
+    moduleConfig.telemetry.air_quality_interval = 5; // in seconds
+    moduleConfig.telemetry.air_quality_enabled = 1;
 
     if (!(moduleConfig.telemetry.air_quality_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it

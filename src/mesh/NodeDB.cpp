@@ -200,6 +200,7 @@ NodeDB::NodeDB()
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
     uint32_t nodeDatabaseCRC = crc32Buffer(&nodeDatabase, sizeof(nodeDatabase));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
+    // uint32_t moduleConfigCRC = crc32Buffer(&moduleConfig, sizeof(moduleConfig));
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
@@ -430,6 +431,49 @@ NodeDB::NodeDB()
 #endif
     }
 #endif
+
+// If this is a SMESH build, log the build tag and the effective config values
+#ifdef USERPREFS_FIRMWARE_EDITION_SMESH
+#else
+#endif
+
+    // Ensure any compile-time userprefs have been applied to interval/config fields
+    // before we print them. Calling these here guarantees that USERPREFS_* macros
+    // that set telemetry/interval defaults are applied regardless of whether the
+    // saved config was loaded from flash or defaults were installed.
+    initConfigIntervals();
+    initModuleConfigIntervals();
+
+    // Recompute CRCs for config/moduleConfig in case compile-time userprefs altered them
+    // uint32_t newConfigCRC = crc32Buffer(&config, sizeof(config));
+    // if (newConfigCRC != configCRC) {
+    //     saveWhat |= SEGMENT_CONFIG;
+    // }
+    // uint32_t newModuleConfigCRC = crc32Buffer(&moduleConfig, sizeof(moduleConfig));
+    // if (newModuleConfigCRC != moduleConfigCRC) {
+    //     saveWhat |= SEGMENT_MODULECONFIG;
+    // }
+
+#ifdef USERPREFS_FIRMWARE_EDITION_SMESH
+    LOG_INFO("SMESH Build Tag: SMESH=%d build=%d", USERPREFS_FIRMWARE_EDITION_SMESH, USERPREFS_BUILD_NUMBER);
+#endif
+
+    LOG_INFO("Effective config: bluetooth.enabled=%d fixed_pin=%u mode=%d serial_enabled=%d",
+             config.bluetooth.enabled, config.bluetooth.fixed_pin, (int)config.bluetooth.mode, config.device.serial_enabled);
+
+    LOG_INFO("Device: node_info_broadcast_secs=%u display.screen_on_secs=%u",
+             config.device.node_info_broadcast_secs, config.display.screen_on_secs);
+
+    LOG_INFO("LoRa: channel_num=%d frequency_offset=%.3f hop_limit=%d region=%d",
+             config.lora.channel_num, config.lora.frequency_offset, config.lora.hop_limit, config.lora.region);
+
+    LOG_INFO("Telemetry: air_quality_enabled=%d air_quality_interval=%u device_update_interval=%u",
+             moduleConfig.telemetry.air_quality_enabled, moduleConfig.telemetry.air_quality_interval,
+             moduleConfig.telemetry.device_update_interval);
+    LOG_INFO("Telemetry: environment_enabled=%d environment_interval=%u power_enabled=%d power_interval=%u",
+             moduleConfig.telemetry.environment_measurement_enabled, moduleConfig.telemetry.environment_update_interval,
+             moduleConfig.telemetry.power_measurement_enabled, moduleConfig.telemetry.power_update_interval);
+
     sortMeshDB();
     saveToDisk(saveWhat);
 }
@@ -647,7 +691,18 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
-    config.security.serial_enabled = true;
+
+#ifdef USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS
+    config.device.node_info_broadcast_secs = USERPREFS_CONFIG_DEVICE_NODE_INFO_BROADCAST_SECS;
+#endif
+
+#ifdef USERPREFS_CONFIG_DEVICE_SERIAL_ENABLED
+    config.device.serial_enabled = USERPREFS_CONFIG_DEVICE_SERIAL_ENABLED;
+#else
+    config.device.serial_enabled = true;
+#endif
+
+    config.security.serial_enabled = config.device.serial_enabled;
     config.security.admin_channel_enabled = false;
     resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
@@ -685,6 +740,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
 
+// Allow build-time override of Bluetooth enabled state
+#ifdef USERPREFS_BLUETOOTH_ENABLED
+    config.bluetooth.enabled = USERPREFS_BLUETOOTH_ENABLED;
+#endif
+
 #ifdef USERPREFS_FIXED_BLUETOOTH
     config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
     config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
@@ -717,6 +777,20 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 #ifdef USERPREFS_NETWORK_WIFI_PSK
     strncpy(config.network.wifi_psk, USERPREFS_NETWORK_WIFI_PSK, sizeof(config.network.wifi_psk));
+#endif
+
+// Optional build-time LoRa overrides
+#ifdef USERPREFS_LORACONFIG_FREQUENCY_OFFSET
+    config.lora.frequency_offset = USERPREFS_LORACONFIG_FREQUENCY_OFFSET;
+#endif
+
+#ifdef USERPREFS_LORACONFIG_HOP_LIMIT
+    config.lora.hop_limit = USERPREFS_LORACONFIG_HOP_LIMIT;
+#endif
+
+// Optional display override
+#ifdef USERPREFS_DISPLAY_SCREEN_ON_SECS
+    config.display.screen_on_secs = USERPREFS_DISPLAY_SCREEN_ON_SECS;
 #endif
 
 #if defined(USERPREFS_NETWORK_IPV6_ENABLED)
@@ -759,14 +833,44 @@ void NodeDB::initConfigIntervals()
 #else
     config.position.gps_update_interval = default_gps_update_interval;
 #endif
-#ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
-    config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
+// #ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
+// Environment telemetry
+#ifdef USERPREFS_ENVIRONMENT_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.environment_measurement_enabled = USERPREFS_ENVIRONMENT_MEASUREMENT_ENABLED;
 #else
-    config.position.position_broadcast_secs = default_broadcast_interval_secs;
+    moduleConfig.telemetry.environment_measurement_enabled = 0;
 #endif
 
-    config.power.ls_secs = default_ls_secs;
-    config.power.min_wake_secs = default_min_wake_secs;
+#ifdef USERPREFS_ENVIRONMENT_UPDATE_INTERVAL
+    moduleConfig.telemetry.environment_update_interval = USERPREFS_ENVIRONMENT_UPDATE_INTERVAL;
+#else
+    moduleConfig.telemetry.environment_update_interval = 0;
+#endif
+
+    // Air quality telemetry
+#ifdef USERPREFS_AIR_QUALITY_ENABLED
+    moduleConfig.telemetry.air_quality_enabled = USERPREFS_AIR_QUALITY_ENABLED;
+#else
+    moduleConfig.telemetry.air_quality_enabled = 0;
+#endif
+#ifdef USERPREFS_AIR_QUALITY_INTERVAL
+    moduleConfig.telemetry.air_quality_interval = USERPREFS_AIR_QUALITY_INTERVAL;
+#else
+    moduleConfig.telemetry.air_quality_interval = 0;
+#endif
+
+// Power telemetry
+#ifdef USERPREFS_POWER_MEASUREMENT_ENABLED
+    moduleConfig.telemetry.power_measurement_enabled = USERPREFS_POWER_MEASUREMENT_ENABLED;
+#else
+    moduleConfig.telemetry.power_measurement_enabled = 0;
+#endif
+
+#ifdef USERPREFS_POWER_UPDATE_INTERVAL
+    moduleConfig.telemetry.power_update_interval = USERPREFS_POWER_UPDATE_INTERVAL;
+#else
+    moduleConfig.telemetry.power_update_interval = 0;
+#endif
     config.power.sds_secs = default_sds_secs;
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
 
@@ -777,6 +881,8 @@ void NodeDB::initConfigIntervals()
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
 #endif
+// #endif // USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
+
 }
 
 void NodeDB::installDefaultModuleConfig()
@@ -974,7 +1080,11 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
     moduleConfig.telemetry.environment_update_interval = 0;
+#ifdef USERPREFS_AIR_QUALITY_INTERVAL
+    moduleConfig.telemetry.air_quality_interval = USERPREFS_AIR_QUALITY_INTERVAL;
+#else
     moduleConfig.telemetry.air_quality_interval = 0;
+#endif
     moduleConfig.telemetry.power_update_interval = 0;
     moduleConfig.telemetry.health_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
