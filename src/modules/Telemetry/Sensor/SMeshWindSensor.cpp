@@ -96,6 +96,7 @@ bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     // Get wind direction as scaled angle value from AS5600
     uint16_t windDirection = as5600.getAngle();         // 0-4095 corresponds to 0-360 degrees
+    windDirection = (windDirection * 16) / 182;          // Scale to 0-360 degrees without overflowing
     measurement->variant.environment_metrics.has_wind_direction = true;
     measurement->variant.environment_metrics.wind_direction = windDirection;
     LOG_INFO("Wind Direction: %u (AS5600 scaled angle)", windDirection);

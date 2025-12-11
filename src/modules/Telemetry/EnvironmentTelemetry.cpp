@@ -618,7 +618,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
 #endif
-    return valid && hasSensor;
+    return valid && hasSensor;      // Every sensor expected has provided values, and there is at least one sensor
 }
 
 meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
