@@ -484,7 +484,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         }
         entries.push_back(aqi);
 
-        if (m.wind_direction != 0 && m.wind_speed != 0) {
+        if (m.wind_direction != 0 || m.wind_speed != 0) {
             String windStr = "Wind: " + String(m.wind_speed, 1) + "m/s ";
             windStr += "(" + String(m.wind_direction, 3) + ")";
             entries.push_back(windStr);

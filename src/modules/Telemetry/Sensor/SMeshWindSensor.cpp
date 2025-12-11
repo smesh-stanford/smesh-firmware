@@ -38,7 +38,7 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     as5600.setFastFilterThresh(AS5600_FAST_FILTER_THRESH_SLOW_ONLY);
     as5600.setZPosition(0);
     as5600.setMPosition(4095);
-    as5600.setMaxAngle(4095);
+    as5600.setMaxAngle(4095);               // PHM Can this be adjusted for 0-360 degree range?
 
     // Check magnet detection
     if (!as5600.isMagnetDetected()) {
@@ -55,14 +55,14 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 
 #ifdef ARCH_ESP32
 #ifdef GPIO_WIND_COUNTER
-    // CRITICAL FIX: Initialize PCNT for wind speed counter
+    // Initialize PCNT for wind speed counter
     pcnt_config_t pcnt_config = {
-        .pulse_gpio_num = GPIO_WIND_COUNTER,  // GPIO 33
+        .pulse_gpio_num = GPIO_WIND_COUNTER,  // Conneect to anemometer hall effect output
         .ctrl_gpio_num = PCNT_PIN_NOT_USED,
         .lctrl_mode = PCNT_MODE_KEEP,
         .hctrl_mode = PCNT_MODE_KEEP,
-        .pos_mode = PCNT_COUNT_INC,      // Count rising edges
-        .neg_mode = PCNT_COUNT_DIS,      // Ignore falling edges
+        .pos_mode = PCNT_COUNT_INC,         // Count rising edges
+        .neg_mode = PCNT_COUNT_DIS,         // Ignore falling edges
         .counter_h_lim = 32767,
         .counter_l_lim = -32768,
         .unit = PCNT_UNIT_0,
@@ -95,7 +95,7 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     // Get wind direction as scaled angle value from AS5600
-    uint16_t windDirection = as5600.getAngle();
+    uint16_t windDirection = as5600.getAngle();         // 0-4095 corresponds to 0-360 degrees
     measurement->variant.environment_metrics.has_wind_direction = true;
     measurement->variant.environment_metrics.wind_direction = windDirection;
     LOG_INFO("Wind Direction: %u (AS5600 scaled angle)", windDirection);
