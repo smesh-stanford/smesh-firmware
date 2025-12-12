@@ -38,7 +38,7 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     as5600.setFastFilterThresh(AS5600_FAST_FILTER_THRESH_SLOW_ONLY);
     as5600.setZPosition(0);
     as5600.setMPosition(4095);
-    as5600.setMaxAngle(4095);               // PHM Can this be adjusted for 0-360 degree range?
+    as5600.setMaxAngle(4095);
 
     // Check magnet detection
     if (!as5600.isMagnetDetected()) {
@@ -96,7 +96,7 @@ bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     // Get wind direction as scaled angle value from AS5600
     uint16_t windDirection = as5600.getAngle();         // 0-4095 corresponds to 0-360 degrees
-    windDirection = (windDirection * 16) / 182;          // Scale to 0-360 degrees without overflowing
+    windDirection = (windDirection * 16) / 182;          // Scale to 0~360 degrees without overflowing
     measurement->variant.environment_metrics.has_wind_direction = true;
     measurement->variant.environment_metrics.wind_direction = windDirection;
     LOG_INFO("Wind Direction: %u (AS5600 scaled angle)", windDirection);
