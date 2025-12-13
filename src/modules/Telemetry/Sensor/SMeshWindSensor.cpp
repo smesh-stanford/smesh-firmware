@@ -6,6 +6,7 @@
 #include "SMeshWindSensor.h"
 #include "TelemetrySensor.h"
 #include "gps/GeoCoord.h"
+#include <cmath>
 #include <string>
 
 #ifdef ARCH_ESP32
@@ -87,36 +88,152 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #endif
 #endif
 
+    // Initialize wind direction averaging buffer
+    bufferIndex = 0;
+    bufferCount = 0;
+    lastCounterValue = 0;
+    lastSampleMillis = 0;
+
+    // Calculate sampling period based on telemetry interval
+    uint32_t telemetryIntervalSec = moduleConfig.telemetry.environment_update_interval;
+    if (telemetryIntervalSec == 0) {
+        telemetryIntervalSec = 180;  // Use default from smesh_defaults.h
+    }
+
+    // Calculate period: interval / buffer_size, clamped to constraints
+    samplePeriodMs = (telemetryIntervalSec * 1000) / WIND_DIRECTION_BUFFER_SIZE;
+    if (samplePeriodMs < MIN_WIND_SPEED_AVERAGE_INTERVAL * 1000) {
+        samplePeriodMs = MIN_WIND_SPEED_AVERAGE_INTERVAL * 1000;
+    }
+    if (samplePeriodMs >= telemetryIntervalSec * 1000) {
+        samplePeriodMs = (telemetryIntervalSec * 1000) - 1000;  // Leave 1 second margin
+    }
+
+    LOG_INFO("Wind direction averaging: %u samples every %u ms (telemetry interval: %u s)",
+             WIND_DIRECTION_BUFFER_SIZE, samplePeriodMs, telemetryIntervalSec);
+
     LOG_DEBUG("SMesh Wind Sensor init succeeded");
     initI2CSensor();
     return status;
 }
 
+int32_t SMeshWindSensor::runOnce()
+{
+    if (!status) {
+        return INT32_MAX;  // Sensor not initialized
+    }
+
+    uint32_t currentMillis = millis();
+
+    // Check if it's time to take a sample
+    if (lastSampleMillis == 0 || (currentMillis - lastSampleMillis) >= samplePeriodMs) {
+
+#ifdef ARCH_ESP32
+#ifdef GPIO_WIND_COUNTER
+        // Read current PCNT counter value (don't clear it)
+        int16_t currentCounterValue = 0;
+        esp_err_t err = pcnt_get_counter_value(PCNT_UNIT_0, &currentCounterValue);
+        if (err != ESP_OK) {
+            LOG_ERROR("PCNT get counter value failed in runOnce: %d", err);
+            return samplePeriodMs;
+        }
+
+        // Calculate delta since last sample
+        int16_t countDelta = currentCounterValue - lastCounterValue;
+
+        // Only sample direction if sufficient wind activity
+        if (abs(countDelta) > MIN_WIND_COUNTS) {
+            // Read AS5600 direction
+            uint16_t rawDirection = as5600.getAngle();
+            uint16_t scaledDirection = (rawDirection * 16) / 182;  // Scale to 0-360
+
+            // Store sample in circular buffer
+            windBuffer[bufferIndex].direction = scaledDirection;
+            windBuffer[bufferIndex].countDelta = countDelta;
+
+            LOG_INFO("Wind sample [%u/%u]: dir=%u°, counts=%d",
+                     bufferIndex + 1, WIND_DIRECTION_BUFFER_SIZE,
+                     scaledDirection, countDelta);
+
+            // Advance buffer position (circular)
+            bufferIndex = (bufferIndex + 1) % WIND_DIRECTION_BUFFER_SIZE;
+            if (bufferCount < WIND_DIRECTION_BUFFER_SIZE) {
+                bufferCount++;
+            }
+        } else {
+            LOG_DEBUG("Wind sample skipped: count delta (%d) < threshold (%d)",
+                      countDelta, MIN_WIND_COUNTS);
+        }
+
+        // Update for next delta calculation
+        lastCounterValue = currentCounterValue;
+#endif
+#endif
+
+        lastSampleMillis = currentMillis;
+    }
+
+    return samplePeriodMs;  // Request to be called again in samplePeriodMs milliseconds
+}
+
 bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    // Get wind direction as scaled angle value from AS5600
-    uint16_t windDirection = as5600.getAngle();         // 0-4095 corresponds to 0-360 degrees
-    windDirection = (windDirection * 16) / 182;          // Scale to 0~360 degrees without overflowing
-    measurement->variant.environment_metrics.has_wind_direction = true;
-    measurement->variant.environment_metrics.wind_direction = windDirection;
-    LOG_INFO("Wind Direction: %u (AS5600 scaled angle)", windDirection);
+    // Calculate averaged wind direction from buffer using weighted vector averaging
+    if (bufferCount > 0) {
+        double sumX = 0.0;
+        double sumY = 0.0;
 
-    // Calculate delta millis since last wind speed reading
+        for (uint8_t i = 0; i < bufferCount; i++) {
+            // Convert direction to radians
+            double angleRad = windBuffer[i].direction * M_PI / 180.0;
+
+            // Weight by wind speed (count delta as proxy)
+            double weight = abs(windBuffer[i].countDelta);
+
+            // Accumulate vector components
+            sumX += weight * cos(angleRad);
+            sumY += weight * sin(angleRad);
+        }
+
+        // Calculate average direction from vector sum
+        double avgAngleRad = atan2(sumY, sumX);
+
+        // Convert back to degrees [0, 360)
+        double avgAngleDeg = avgAngleRad * 180.0 / M_PI;
+        if (avgAngleDeg < 0) {
+            avgAngleDeg += 360.0;
+        }
+
+        measurement->variant.environment_metrics.has_wind_direction = true;
+        measurement->variant.environment_metrics.wind_direction = (uint16_t)avgAngleDeg;
+
+        LOG_INFO("Wind Direction (averaged over %u samples): %u°",
+                 bufferCount, (uint16_t)avgAngleDeg);
+    } else {
+        // No samples collected - report 0 and warn
+        measurement->variant.environment_metrics.has_wind_direction = true;
+        measurement->variant.environment_metrics.wind_direction = 0;
+        LOG_INFO("No wind detected during this interval (buffer empty)");
+    }
+
+    // Clear buffer for next averaging period
+    bufferIndex = 0;
+    bufferCount = 0;
+
+    // Calculate wind speed (existing logic with minor modifications)
     uint32_t currentMillis = millis();
     uint32_t deltaMillis = currentMillis - lastWindSpeedMillis;
 
-    // Only update wind speed if at least 1000ms have passed
     if (deltaMillis < 1000) {
         LOG_DEBUG("Wind speed update skipped (delta: %u ms)", deltaMillis);
         return true;
     }
 
-    // Update the last millis timestamp
     lastWindSpeedMillis = currentMillis;
 
 #ifdef ARCH_ESP32
 #ifdef GPIO_WIND_COUNTER
-    // Read the PCNT counter value
+    // Read and clear the PCNT counter
     int16_t counterValue = 0;
     esp_err_t err = pcnt_get_counter_value(PCNT_UNIT_0, &counterValue);
     if (err != ESP_OK) {
@@ -126,37 +243,35 @@ bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
         return true;
     }
 
-    // Log the raw counter value before clearing
     LOG_INFO("Raw counter value: %d", counterValue);
 
-    // Clear the counter
+    // Clear the counter for next period
     err = pcnt_counter_clear(PCNT_UNIT_0);
     if (err != ESP_OK) {
         LOG_ERROR("PCNT counter clear failed: %d", err);
     }
 
+    // Reset lastCounterValue since we cleared the counter
+    lastCounterValue = 0;
+
     // Calculate counts per second
     float countsPerSecond = ((float)counterValue / (float)deltaMillis) * 1000.0f;
 
-    // Store wind speed in measurement
     measurement->variant.environment_metrics.has_wind_speed = true;
     measurement->variant.environment_metrics.wind_speed = countsPerSecond;
 
-    // Log the calculated values
-    LOG_INFO("Counts before clearing: %d, Counts/second: %.2f, Delta millis: %u",
+    LOG_INFO("Counts: %d, Counts/second: %.2f, Delta millis: %u",
              counterValue, countsPerSecond, deltaMillis);
 #else
-    // GPIO_WIND_COUNTER not defined
     measurement->variant.environment_metrics.has_wind_speed = true;
     measurement->variant.environment_metrics.wind_speed = 0.0f;
     LOG_DEBUG("Wind speed not available (GPIO_WIND_COUNTER not defined)");
-#endif // GPIO_WIND_COUNTER
+#endif
 #else
-    // Fallback for non-ESP32 platforms
     measurement->variant.environment_metrics.has_wind_speed = true;
     measurement->variant.environment_metrics.wind_speed = 0.0f;
     LOG_WARN("PCNT not available on this platform");
-#endif // ARCH_ESP32
+#endif
 
     return true;
 }
