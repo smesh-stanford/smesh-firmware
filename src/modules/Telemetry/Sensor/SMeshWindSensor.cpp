@@ -9,6 +9,11 @@
 #include <cmath>
 #include <string>
 
+// For sending diagnostic text messages
+#include "MeshService.h"
+#include "Router.h"
+#include <cstring>
+
 #ifdef ARCH_ESP32
 #include "driver/pcnt.h"
 #endif
@@ -26,6 +31,21 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     status = as5600.begin(dev->address.address, bus);
     if (!status) {
         LOG_ERROR("AS5600 begin() failed - sensor not responding");
+
+        // Broadcast a short diagnostic text message to the mesh so other nodes/apps can see the error
+        // {
+        //     meshtastic_MeshPacket *p = router->allocForSending();
+        //     p->to = NODENUM_BROADCAST;
+        //     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        //     const char msg[] = "SMESH: wind sensor AS5600 init failed";
+        //     size_t mlen = strlen(msg);
+        //     if (mlen > meshtastic_Constants_DATA_PAYLOAD_LEN)
+        //         mlen = meshtastic_Constants_DATA_PAYLOAD_LEN;
+        //     p->decoded.payload.size = (uint16_t)mlen;
+        //     memcpy(p->decoded.payload.bytes, msg, p->decoded.payload.size);
+        //     service->sendToMesh(p, RX_SRC_LOCAL, true);
+        // }
+
         initI2CSensor();
         return status;
     }
@@ -145,7 +165,10 @@ int32_t SMeshWindSensor::runOnce()
         if (abs(countDelta) > MIN_WIND_COUNTS) {
             // Read AS5600 direction
             uint16_t rawDirection = as5600.getAngle();
-            uint16_t scaledDirection = (rawDirection * 16) / 182;  // Scale to 0-360
+
+            // Convert 12-bit AS5600 angle (0-4095) to degrees [0,360)
+            double deg = rawDirection * SMeshWindSensor::AS5600_TO_DEG;
+            uint16_t scaledDirection = static_cast<uint16_t>(lround(deg) % 360);
 
             // Store sample in circular buffer
             windBuffer[bufferIndex].direction = scaledDirection;
@@ -161,7 +184,7 @@ int32_t SMeshWindSensor::runOnce()
                 bufferCount++;
             }
         } else {
-            LOG_DEBUG("Wind sample skipped: count delta (%d) < threshold (%d)",
+            LOG_DEBUG("Wind sample skipped: pulse count delta=%d < threshold=%d",
                       countDelta, MIN_WIND_COUNTS);
         }
 
