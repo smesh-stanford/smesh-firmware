@@ -847,6 +847,12 @@ void NodeDB::initConfigIntervals()
     moduleConfig.telemetry.environment_update_interval = 0;
 #endif
 
+#ifdef USERPREFS_ENVIRONMENT_SCREEN_ENABLED
+    moduleConfig.telemetry.environment_screen_enabled = USERPREFS_ENVIRONMENT_SCREEN_ENABLED;
+#else
+    moduleConfig.telemetry.environment_screen_enabled = 0;
+#endif
+
 // Air quality telemetry
 #ifdef USERPREFS_AIR_QUALITY_ENABLED
     moduleConfig.telemetry.air_quality_enabled = USERPREFS_AIR_QUALITY_ENABLED;

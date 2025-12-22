@@ -485,12 +485,6 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         }
         entries.push_back(aqi);
 
-        if (m.wind_direction != 0 || m.wind_speed != 0) {
-            String windStr = "Wind: " + String(m.wind_speed, 1) + "m/s ";
-            windStr += "(" + String(m.wind_direction, 3) + ")";
-            entries.push_back(windStr);
-        }
-
         // === IAQ alert logic ===
         static uint32_t lastAlertTime = 0;
         uint32_t now = millis();
@@ -509,6 +503,11 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
             lastAlertTime = now;
         }
+    }
+    if (m.wind_direction != 0 || m.wind_speed != 0) {
+        String windStr = String(m.wind_speed, 1) + "m/s ";
+        windStr += "(" + String(m.wind_direction, 3) + ")";
+        entries.push_back(windStr);
     }
     if (m.voltage != 0 || m.current != 0)
         entries.push_back(String(m.voltage, 1) + "V / " + String(m.current, 0) + "mA");
