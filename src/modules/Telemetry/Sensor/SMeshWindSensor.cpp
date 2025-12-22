@@ -269,6 +269,9 @@ bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
         return true;
     }
 
+    // Fake wind speed for testing
+    counterValue += random(0, 50);
+    
     LOG_INFO("Raw counter value: %d", counterValue);
 
     // Clear the counter for next period
