@@ -296,15 +296,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
-    /*
-        Uncomment the preferences below if you want to use the module
-        without having to configure it from the PythonAPI or WebUI, and
-        you want to override the SMesh Defaults in #include "smesh_defaults.h".
-    */
-
-    //moduleConfig.telemetry.environment_measurement_enabled = 1;
-    //moduleConfig.telemetry.environment_screen_enabled = 1;
-    //moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
           ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE)) {
