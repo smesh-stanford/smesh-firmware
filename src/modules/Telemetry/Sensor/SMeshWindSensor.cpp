@@ -147,9 +147,6 @@ int32_t SMeshWindSensor::runOnce()
         // Calculate delta since last sample
         int16_t countDelta = currentCounterValue - lastCounterValue;
 
-        // Fake wind speed for testing
-           countDelta += random(0, 50);
-
         // Only sample direction if sufficient wind activity
         if (abs(countDelta) > MIN_WIND_COUNTS) {
             // Read AS5600 direction
