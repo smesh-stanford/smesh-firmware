@@ -32,20 +32,6 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     if (!status) {
         LOG_ERROR("AS5600 begin() failed - sensor not responding");
 
-        // Broadcast a short diagnostic text message to the mesh so other nodes/apps can see the error
-        // {
-        //     meshtastic_MeshPacket *p = router->allocForSending();
-        //     p->to = NODENUM_BROADCAST;
-        //     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-        //     const char msg[] = "SMESH: wind sensor AS5600 init failed";
-        //     size_t mlen = strlen(msg);
-        //     if (mlen > meshtastic_Constants_DATA_PAYLOAD_LEN)
-        //         mlen = meshtastic_Constants_DATA_PAYLOAD_LEN;
-        //     p->decoded.payload.size = (uint16_t)mlen;
-        //     memcpy(p->decoded.payload.bytes, msg, p->decoded.payload.size);
-        //     service->sendToMesh(p, RX_SRC_LOCAL, true);
-        // }
-
         initI2CSensor();
         return status;
     }
