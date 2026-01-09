@@ -64,7 +64,7 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
 #ifdef GPIO_WIND_COUNTER
     // Initialize PCNT for wind speed counter
     pcnt_config_t pcnt_config = {
-        .pulse_gpio_num = GPIO_WIND_COUNTER,  // Conneect to anemometer hall effect output
+        .pulse_gpio_num = GPIO_WIND_COUNTER,  // Connect to anemometer hall effect output, GPIO 33
         .ctrl_gpio_num = PCNT_PIN_NOT_USED,
         .lctrl_mode = PCNT_MODE_KEEP,
         .hctrl_mode = PCNT_MODE_KEEP,
@@ -252,9 +252,6 @@ bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
         return true;
     }
 
-    // Fake wind speed for testing
-    counterValue += random(0, 50);
-    
     LOG_INFO("Raw counter value: %d", counterValue);
 
     // Clear the counter for next period
