@@ -1,3 +1,5 @@
+#include <cstdarg>
+
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_AS5600.h>)
@@ -17,6 +19,37 @@
 #ifdef ARCH_ESP32
 #include "driver/pcnt.h"
 #endif
+
+// Central function to broadcast wind sensor warnings as messages
+static void broadcastWindSensorWarning(const char *fmt, ...) {
+    char msg[128];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+
+    // Allocate a mesh packet and populate it as a text message
+    meshtastic_MeshPacket *p = packetPool.allocZeroed();
+    p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    p->from = nodeDB->getNodeNum();
+    p->to = NODENUM_BROADCAST;
+    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+
+    size_t len = strnlen(msg, sizeof(p->decoded.payload.bytes));
+    p->decoded.payload.size = len;
+    memcpy(p->decoded.payload.bytes, msg, len);
+    if (len < sizeof(p->decoded.payload.bytes))
+        p->decoded.payload.bytes[len] = '\0';
+
+    p->want_ack = false;
+    p->pki_encrypted = false;
+
+    // Send into mesh (and cc to phone)
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
+
+    // Always log locally as well
+    LOG_WARN("Sending warning, wind sensor: %s", msg);
+}
 
 // Static variable to track last time wind speed was calculated
 static uint32_t lastWindSpeedMillis = 0;
@@ -47,17 +80,29 @@ bool SMeshWindSensor::initDevice(TwoWire *bus, ScanI2C::FoundDevice *dev)
     as5600.setMPosition(4095);
     as5600.setMaxAngle(4095);
 
+    // test broadcast wind sensor warning
+    // while(1) {
+    //     broadcastWindSensorWarning("Test wind sensor warning at %u ms", millis());
+    //     // delay(10000);
+    //     break;
+    // }
+
+    // we need a state to store the magnet errors we see here! We want to broadcast this
+    // over the internet
+
+    
+
     // Check magnet detection
     if (!as5600.isMagnetDetected()) {
-        LOG_WARN("AS5600: No magnet detected - readings will be invalid");
+        broadcastWindSensorWarning("AS5600: No magnet detected - readings will be invalid");
     }
 
     // Check AGC gain overflows
     if (as5600.isAGCminGainOverflow()) {
-        LOG_WARN("AS5600: Magnet too strong - move it further away");
+        broadcastWindSensorWarning("AS5600: Magnet too strong - move it further away");
     }
     if (as5600.isAGCmaxGainOverflow()) {
-        LOG_WARN("AS5600: Magnet too weak - move closer or use stronger magnet");
+        broadcastWindSensorWarning("AS5600: Magnet too weak - move closer or use stronger magnet");
     }
 
 #ifdef ARCH_ESP32
@@ -187,6 +232,9 @@ int32_t SMeshWindSensor::runOnce()
 
 bool SMeshWindSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    // test broadcasting wind sensor warning
+    broadcastWindSensorWarning("Test wind sensor warning at %u ms", millis());
+
     // Calculate averaged wind direction from buffer using weighted vector averaging
     if (bufferCount > 0) {
         double sumX = 0.0;
