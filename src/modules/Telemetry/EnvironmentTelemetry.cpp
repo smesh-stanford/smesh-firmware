@@ -197,7 +197,7 @@ void EnvironmentTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 #if __has_include(<Adafruit_AS5600.h>)
-    // SMesh Wind Sensor (AS5600 + GPIO counter) - uses DFRobot library
+    // SMesh Wind Sensor (AS5600 + GPIO counter)
     addSensor<SMeshWindSensor>(i2cScanner, ScanI2C::DeviceType::AS5600);
 #endif
 #if __has_include(<DFRobot_RainfallSensor.h>)
@@ -296,14 +296,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
-    /*
-        Uncomment the preferences below if you want to use the module
-        without having to configure it from the PythonAPI or WebUI.
-    */
-
-    moduleConfig.telemetry.environment_measurement_enabled = 1;
-    moduleConfig.telemetry.environment_screen_enabled = 1;
-    moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
           ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE)) {
@@ -428,7 +420,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     // Check if any telemetry field has valid data
     bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.iaq != 0 || m.voltage != 0 ||
-                  m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
+                  m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0 ||
+                  m.wind_direction != 0 || m.wind_speed != 0;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -481,7 +474,6 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
             aqi += " (Hazardous)";
             bannerMsg = "Hazardous IAQ";
         }
-
         entries.push_back(aqi);
 
         // === IAQ alert logic ===
@@ -502,6 +494,11 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
             lastAlertTime = now;
         }
+    }
+    if (m.wind_direction != 0 || m.wind_speed != 0) {
+        String windStr = String(m.wind_speed, 1) + "m/s ";
+        windStr += "(" + String(m.wind_direction, 3) + ")";
+        entries.push_back(windStr);
     }
     if (m.voltage != 0 || m.current != 0)
         entries.push_back(String(m.voltage, 1) + "V / " + String(m.current, 0) + "mA");
@@ -612,7 +609,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
 #endif
-    return valid && hasSensor;
+    return valid && hasSensor;      // Every sensor expected has provided values, and there is at least one sensor
 }
 
 meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
