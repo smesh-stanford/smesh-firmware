@@ -160,7 +160,7 @@ int32_t SMeshWindSensor::runOnce()
             windBuffer[bufferIndex].direction = scaledDirection;
             windBuffer[bufferIndex].countDelta = countDelta;
 
-            LOG_INFO("Wind sample [%u/%u]: dir=%u°, counts=%d",
+            LOG_INFO("Wind sample [%u/%u]: dir=%u degrees, counts=%d",
                      bufferIndex + 1, WIND_DIRECTION_BUFFER_SIZE,
                      scaledDirection, countDelta);
 
