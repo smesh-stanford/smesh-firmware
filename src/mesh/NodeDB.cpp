@@ -841,6 +841,13 @@ void NodeDB::initConfigIntervals()
     moduleConfig.telemetry.environment_measurement_enabled = 0;
 #endif
 
+// enable device metrics
+#ifdef USERPREFS_DEVICE_TELEMETRY_ENABLED
+    moduleConfig.telemetry.device_telemetry_enabled = USERPREFS_DEVICE_TELEMETRY_ENABLED;
+#else
+    moduleConfig.telemetry.device_telemetry_enabled = 0;
+#endif
+
 #ifdef USERPREFS_ENVIRONMENT_UPDATE_INTERVAL
     moduleConfig.telemetry.environment_update_interval = USERPREFS_ENVIRONMENT_UPDATE_INTERVAL;
 #else
@@ -1084,7 +1091,9 @@ void NodeDB::initModuleConfigIntervals()
 #else
     moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
 #endif
-    moduleConfig.telemetry.environment_update_interval = 0;
+
+    // moduleConfig.telemetry.environment_update_interval = 0;
+
 #ifdef USERPREFS_AIR_QUALITY_INTERVAL
     moduleConfig.telemetry.air_quality_interval = USERPREFS_AIR_QUALITY_INTERVAL;
 #else

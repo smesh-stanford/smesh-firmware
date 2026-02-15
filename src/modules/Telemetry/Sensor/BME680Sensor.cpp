@@ -95,13 +95,18 @@ void BME680Sensor::updateState()
     if (stateUpdateCounter == 0) {
         /* First state update when IAQ accuracy is >= 3 */
         accuracy = bme680.getData(BSEC_OUTPUT_IAQ).accuracy;
-        if (accuracy >= 2) {
-            LOG_DEBUG("%s state update IAQ accuracy %u >= 2", sensorName, accuracy);
-            update = true;
-            stateUpdateCounter++;
-        } else {
-            LOG_DEBUG("%s not updated, IAQ accuracy is %u < 2", sensorName, accuracy);
-        }
+
+        LOG_DEBUG("%s IAQ accuracy is %u >= 2. Note that we skip getting the status to send packets", sensorName, accuracy);
+        update = true;
+        stateUpdateCounter++;
+
+        // if (accuracy >= 2) {
+        //     LOG_DEBUG("%s state update IAQ accuracy %u >= 2", sensorName, accuracy);
+        //     update = true;
+        //     stateUpdateCounter++;
+        // } else {
+        //     LOG_DEBUG("%s not updated, IAQ accuracy is %u < 2", sensorName, accuracy);
+        // }
     } else {
         /* Update every STATE_SAVE_PERIOD minutes */
         if ((stateUpdateCounter * STATE_SAVE_PERIOD) < millis()) {
