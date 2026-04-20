@@ -12,6 +12,7 @@
 #include "buzz.h"
 
 #include "FSCommon.h"
+#include "smesh_sd_card.h"
 #include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
@@ -753,8 +754,16 @@ void setup()
 
 #endif
 
+#if defined(HAS_SDCARD) && defined(SMESH_HELTEC_V3_SD) && !defined(SDCARD_USE_SOFT_SPI)
+    // Wall-clock folder name for SD logs; safe to call twice with the later tzset/readFromRTC.
+    readFromRTC();
+#endif
 #ifdef HAS_SDCARD
     setupSDCard();
+#endif
+#if defined(HAS_SDCARD) && defined(SMESH_HELTEC_V3_SD) && !defined(SDCARD_USE_SOFT_SPI)
+    smesh_sd_init_log_session();
+    smesh_sd_run_smoke_test();
 #endif
 
     // LED init

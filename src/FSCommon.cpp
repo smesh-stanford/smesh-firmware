@@ -16,6 +16,7 @@
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 #include <SD.h>
 #include <SPI.h>
+#include <cstring>
 
 #ifdef SDCARD_USE_SPI1
 SPIClass SPI_HSPI(HSPI);
@@ -336,3 +337,83 @@ void setupSDCard()
     LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
 #endif
 }
+
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
+
+static void sdEnsureParentDir(const char *path)
+{
+    const char *finalSlash = strrchr(path, '/');
+    if (!finalSlash || finalSlash == path)
+        return;
+
+    char dir[64];
+    size_t end = (size_t)(finalSlash - path);
+    for (size_t i = 1; i < end; i++) {
+        if (path[i] != '/')
+            continue;
+        memcpy(dir, path, i);
+        dir[i] = '\0';
+        if (!SD.exists(dir))
+            SD.mkdir(dir);
+    }
+    if (end == 0 || end >= sizeof(dir))
+        return;
+    memcpy(dir, path, end);
+    dir[end] = '\0';
+    if (dir[0] && !SD.exists(dir))
+        SD.mkdir(dir);
+}
+
+bool sdCardAppendLine(const char *path, const char *line, bool tryLock)
+{
+    if (!path || !line || !line[0])
+        return false;
+    if (SD.cardType() == CARD_NONE)
+        return false;
+
+    if (tryLock) {
+        if (!spiLock->try_lock())
+            return false;
+    } else {
+        spiLock->lock();
+    }
+
+    sdEnsureParentDir(path);
+    File f = SD.open(path, FILE_APPEND);
+    if (!f) {
+        spiLock->unlock();
+        return false;
+    }
+    f.print(line);
+    size_t len = strlen(line);
+    if (len == 0 || line[len - 1] != '\n')
+        f.println();
+    f.close();
+    spiLock->unlock();
+    return true;
+}
+
+bool sdCardSmokeTest(const char *path, char *readBack, size_t readBackBytes)
+{
+    if (!path || !readBack || readBackBytes == 0)
+        return false;
+    if (SD.cardType() == CARD_NONE)
+        return false;
+
+    concurrency::LockGuard g(spiLock);
+    File out = SD.open(path, "w");
+    if (!out)
+        return false;
+    out.println("smesh_sd_smoke ok");
+    out.close();
+
+    File in = SD.open(path, "r");
+    if (!in)
+        return false;
+    size_t n = in.readBytes(readBack, readBackBytes - 1);
+    in.close();
+    readBack[n] = '\0';
+    return true;
+}
+
+#endif // HAS_SDCARD && !SDCARD_USE_SOFT_SPI

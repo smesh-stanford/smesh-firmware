@@ -21,6 +21,10 @@ class Lock
     // Must not be called from an ISR.
     void lock();
 
+    /// Like lock(), but returns immediately if the lock is not available (non-blocking).
+    /// @return true if the lock was acquired
+    bool try_lock();
+
     // Unlocks the lock.
     //
     // Must not be called from an ISR.
