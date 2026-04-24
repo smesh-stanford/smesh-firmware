@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "smesh_sd_card.h"
 #include "memGet.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
@@ -338,6 +339,20 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
         va_list arg;
         va_start(arg, format);
+
+#if defined(ARCH_ESP32) && defined(HAS_SDCARD) && defined(SMESH_HELTEC_V3_SD) && !defined(SDCARD_USE_SOFT_SPI)
+        {
+            // arbitrarily picked 384 but this is hopefully enough for most log messages
+            // if we notice clipping of logs, this is likely the culprit
+            char sdBuf[384];
+            va_list arg_sd;
+            va_copy(arg_sd, arg);
+            int n = vsnprintf(sdBuf, sizeof(sdBuf), newFormat, arg_sd);
+            va_end(arg_sd);
+            if (n > 0)
+                smesh_sd_append_log_line(sdBuf);
+        }
+#endif
 
         log_to_serial(logLevel, newFormat, arg);
         log_to_syslog(logLevel, newFormat, arg);

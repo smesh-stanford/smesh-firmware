@@ -21,6 +21,12 @@ void Lock::lock()
     }
 }
 
+bool Lock::try_lock()
+{
+    // this will return immediately if the lock is not available
+    return xSemaphoreTake(handle, 0) == pdTRUE;
+}
+
 void Lock::unlock()
 {
     if (xSemaphoreGive(handle) == false) {
@@ -31,6 +37,11 @@ void Lock::unlock()
 Lock::Lock() {}
 
 void Lock::lock() {}
+
+bool Lock::try_lock()
+{
+    return true;
+}
 
 void Lock::unlock() {}
 #endif
