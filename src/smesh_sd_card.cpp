@@ -18,6 +18,11 @@ void smesh_sd_init_log_session(void)
     if (SD.cardType() == CARD_NONE)
         return;
 
+    // a human readable identifier for this where it's based on the time
+    // if time isn't available it'll be NOT named after the current time but instead
+    // "boot" with the millis timestamp
+    //
+    // 48 as a number that's hopefully enough for most log sessions
     char session[48];
     uint32_t t = getValidTime(RTCQualityDevice, false);
     // If RTC/GPS/phone has not set quality yet, t is 0 — use a per-boot folder name instead.
@@ -30,6 +35,8 @@ void smesh_sd_init_log_session(void)
                  (unsigned)(tm.tm_mon + 1), (unsigned)tm.tm_mday, (unsigned)tm.tm_hour, (unsigned)tm.tm_min,
                  (unsigned)tm.tm_sec);
     } else {
+        // otherwise, time must not be available since the date would otherwise 
+        // be some obnoxiously early date set in the past
         snprintf(session, sizeof(session), "boot_%08lx", (unsigned long)millis());
     }
 

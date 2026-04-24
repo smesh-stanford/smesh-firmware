@@ -29,6 +29,14 @@ SPIClass SPI_HSPI(HSPI);
 #define SD_SPI_FREQUENCY 4000000U
 #endif
 
+// sdCardAppendLine: first attempt + this many retries after transient SPI/CRC errors.
+#ifndef SD_APPEND_MAX_ATTEMPTS
+#define SD_APPEND_MAX_ATTEMPTS 4U
+#endif
+#ifndef SD_APPEND_RETRY_GAP_MS
+#define SD_APPEND_RETRY_GAP_MS 15U
+#endif
+
 #endif // HAS_SDCARD
 
 /**
@@ -378,19 +386,26 @@ bool sdCardAppendLine(const char *path, const char *line, bool tryLock)
         spiLock->lock();
     }
 
-    sdEnsureParentDir(path);
-    File f = SD.open(path, FILE_APPEND);
-    if (!f) {
-        spiLock->unlock();
-        return false;
+    bool ok = false;
+    for (unsigned attempt = 0; attempt < SD_APPEND_MAX_ATTEMPTS; attempt++) {
+        if (attempt > 0)
+            delay(SD_APPEND_RETRY_GAP_MS);
+
+        sdEnsureParentDir(path);
+        File f = SD.open(path, FILE_APPEND);
+        if (!f)
+            continue;
+        f.print(line);
+        size_t len = strlen(line);
+        if (len == 0 || line[len - 1] != '\n')
+            f.println();
+        f.close();
+        ok = true;
+        break;
     }
-    f.print(line);
-    size_t len = strlen(line);
-    if (len == 0 || line[len - 1] != '\n')
-        f.println();
-    f.close();
+
     spiLock->unlock();
-    return true;
+    return ok;
 }
 
 bool sdCardSmokeTest(const char *path, char *readBack, size_t readBackBytes)

@@ -23,6 +23,7 @@ void Lock::lock()
 
 bool Lock::try_lock()
 {
+    // this will return immediately if the lock is not available
     return xSemaphoreTake(handle, 0) == pdTRUE;
 }
 
