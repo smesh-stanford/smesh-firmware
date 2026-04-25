@@ -1,10 +1,11 @@
 #pragma once
 
-// SMesh (Stanford radio club) — Heltec WiFi LoRa 32 V3 + SPI SD (Adafruit-style wiring).
+// SMesh (Stanford radio club) — Heltec WiFi LoRa 32 V3 + SPI SD + external RTC.
 // Base board: variants/esp32s3/heltec_v3/variant.h
 //
 // SPI (host naming): SCK=19, MISO=33 (card DO), MOSI=26 (card DI), CS=47.
 // CD (card detect) on GPIO48 is optional hardware; Arduino SD.begin() does not use it unless you add code.
+//
 
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1

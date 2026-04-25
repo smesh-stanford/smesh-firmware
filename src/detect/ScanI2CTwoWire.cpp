@@ -402,10 +402,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = MAX30102;
                     logFoundDevice("MAX30102", (uint8_t)addr.address);
                     break;
-                } else {
-                    type = RCWL9620;
-                    logFoundDevice("RCWL9620", (uint8_t)addr.address);
                 }
+#ifdef AT24C32_EEPROM
+                if ((uint8_t)addr.address == (uint8_t)AT24C32_EEPROM) {
+                    type = AT24C32;
+                    logFoundDevice("AT24C32", (uint8_t)addr.address);
+                    break;
+                }
+#endif
+                type = RCWL9620;
+                logFoundDevice("RCWL9620", (uint8_t)addr.address);
                 break;
 
             case LPS22HB_ADDR_ALT:
@@ -577,6 +583,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("BMX160", (uint8_t)addr.address);
                     break;
                 } else {
+#ifdef DS3231_RTC
+                    if ((uint8_t)addr.address == (uint8_t)DS3231_RTC) {
+                        // MPU6050 shares 0x68; WHO_AM_I (reg 0x75) returns 0x68 on MPU/ICM path above.
+                        registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x75), 1);
+                        if (registerValue != 0x68) {
+                            type = RTC_DS3231;
+                            logFoundDevice("DS3231", (uint8_t)addr.address);
+                            break;
+                        }
+                    }
+#endif
                     type = MPU6050;
                     logFoundDevice("MPU6050", (uint8_t)addr.address);
                     break;

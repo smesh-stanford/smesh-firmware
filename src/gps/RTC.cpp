@@ -6,6 +6,99 @@
 #include <sys/time.h>
 #include <time.h>
 
+#if defined(DS3231_RTC)
+#include <Wire.h>
+
+static TwoWire &ds3231Bus()
+{
+#if WIRE_INTERFACES_COUNT == 2
+    return rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire;
+#else
+    return Wire;
+#endif
+}
+
+static uint8_t ds3231Bcd2bin(uint8_t v)
+{
+    return (uint8_t)(((v >> 4) * 10U) + (v & 0x0FU));
+}
+
+static uint8_t ds3231Bin2bcd(uint8_t v)
+{
+    return (uint8_t)(((v / 10U) << 4) | (v % 10U));
+}
+
+static bool ds3231ReadTime(struct tm *t)
+{
+    uint8_t buf[7];
+    TwoWire &w = ds3231Bus();
+    w.beginTransmission((uint8_t)DS3231_RTC);
+    w.write((uint8_t)0);
+    if (w.endTransmission(false) != 0)
+        return false;
+    size_t n = w.requestFrom((int)(uint8_t)DS3231_RTC, 7);
+    if (n != 7)
+        return false;
+    for (int i = 0; i < 7; i++) {
+        if (!w.available())
+            return false;
+        buf[i] = (uint8_t)w.read();
+    }
+    t->tm_sec = ds3231Bcd2bin((uint8_t)(buf[0] & 0x7FU));
+    t->tm_min = ds3231Bcd2bin((uint8_t)(buf[1] & 0x7FU));
+    uint8_t hreg = buf[2];
+    if (hreg & 0x40U) {
+        uint8_t h12 = ds3231Bcd2bin((uint8_t)(hreg & 0x1FU));
+        bool pm = (hreg & 0x20U) != 0;
+        if (pm && h12 < 12)
+            h12 = (uint8_t)(h12 + 12U);
+        else if (!pm && h12 == 12)
+            h12 = 0;
+        t->tm_hour = h12;
+    } else {
+        t->tm_hour = ds3231Bcd2bin((uint8_t)(hreg & 0x3FU));
+    }
+    int dow1 = ds3231Bcd2bin((uint8_t)(buf[3] & 0x3FU));
+    if (dow1 >= 1 && dow1 <= 7)
+        t->tm_wday = dow1 - 1;
+    t->tm_mday = ds3231Bcd2bin((uint8_t)(buf[4] & 0x3FU));
+    uint8_t mreg = buf[5];
+    t->tm_mon = ds3231Bcd2bin((uint8_t)(mreg & 0x1FU)) - 1;
+    int y = 2000 + ds3231Bcd2bin(buf[6]);
+    if (mreg & 0x80U)
+        y += 100;
+    t->tm_year = y - 1900;
+    return true;
+}
+
+static bool ds3231WriteTime(const struct tm *t)
+{
+    uint8_t buf[7];
+    buf[0] = ds3231Bin2bcd((uint8_t)t->tm_sec);
+    buf[1] = ds3231Bin2bcd((uint8_t)t->tm_min);
+    buf[2] = ds3231Bin2bcd((uint8_t)t->tm_hour);
+    int wday = t->tm_wday;
+    if (wday < 0)
+        wday = 0;
+    buf[3] = ds3231Bin2bcd((uint8_t)(wday + 1));
+    buf[4] = ds3231Bin2bcd((uint8_t)t->tm_mday);
+    int calYear = 1900 + t->tm_year;
+    uint8_t y2 = (uint8_t)(calYear % 100);
+    uint8_t mon = (uint8_t)(t->tm_mon + 1);
+    buf[6] = ds3231Bin2bcd(y2);
+    uint8_t mreg = ds3231Bin2bcd(mon);
+    if (calYear >= 2100)
+        mreg |= 0x80U;
+    buf[5] = mreg;
+    TwoWire &w = ds3231Bus();
+    w.beginTransmission((uint8_t)DS3231_RTC);
+    w.write((uint8_t)0);
+    for (int i = 0; i < 7; i++)
+        w.write(buf[i]);
+    return w.endTransmission() == 0;
+}
+#endif // DS3231_RTC
+
 static RTCQuality currentQuality = RTCQualityNone;
 uint32_t lastSetFromPhoneNtpOrGps = 0;
 
@@ -52,9 +145,10 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                         (long)printableEpoch, (long)BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
             }
-            return RTCSetResultInvalidTime;
         }
 #endif
 
@@ -93,15 +187,45 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                         (long)printableEpoch, (long)BUILD_EPOCH);
                 lastTimeValidationWarning = millis();
             }
-            return RTCSetResultInvalidTime;
         }
 #endif
 
         LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+        if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
+            currentQuality = RTCQualityDevice;
+        }
+        return RTCSetResultSuccess;
+    }
+#elif defined(DS3231_RTC)
+    if (rtc_found.address == DS3231_RTC) {
+        uint32_t now = millis();
+        struct tm t;
+        if (!ds3231ReadTime(&t))
+            return RTCSetResultNotSet;
+
+        tv.tv_sec = gm_mktime(&t);
+        tv.tv_usec = 0;
+        uint32_t printableEpoch = tv.tv_sec;
+
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                         (long)printableEpoch, (long)BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
+            }
+        }
+#endif
+
+        LOG_DEBUG("Read RTC time from DS3231 as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
+                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, (long)printableEpoch);
         if (currentQuality == RTCQualityNone) {
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
@@ -128,10 +252,10 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
             if (tv.tv_sec < BUILD_EPOCH) {
                 if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                    LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                    LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                             (long)printableEpoch, (long)BUILD_EPOCH);
                     lastTimeValidationWarning = millis();
                 }
-                return RTCSetResultInvalidTime;
             }
 #endif
             if (currentQuality == RTCQualityNone) {
@@ -246,6 +370,15 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+        }
+#elif defined(DS3231_RTC)
+        if (rtc_found.address == DS3231_RTC) {
+            tm *t = gmtime(&tv->tv_sec);
+            if (ds3231WriteTime(t))
+                LOG_DEBUG("DS3231_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                          t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            else
+                LOG_WARN("DS3231 I2C write failed");
         }
 #elif defined(RX8130CE_RTC)
         if (rtc_found.address == RX8130CE_RTC) {
