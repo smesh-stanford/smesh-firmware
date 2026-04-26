@@ -6,9 +6,14 @@
 #define I2C_SDA SDA_OLED // I2C pins for this board
 #define I2C_SCL SCL_OLED
 
-// Enable secondary bus for external periherals
+// Secondary I2C (Wire1): stock Heltec maps Wire1 to the same pins as the primary bus; SMesh uses GPIO41/42 for RTC/SD.
+#if defined(SMESH_HELTEC_V3_SD)
+#define I2C_SDA1 41
+#define I2C_SCL1 42
+#else
 #define I2C_SDA1 SDA
 #define I2C_SCL1 SCL
+#endif
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0

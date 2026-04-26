@@ -6,6 +6,141 @@
 #include <sys/time.h>
 #include <time.h>
 
+#if defined(DS3231_RTC)
+#include <Wire.h>
+
+static TwoWire &ds3231Bus()
+{
+#if WIRE_INTERFACES_COUNT == 2
+    // Use the I2C bus where the scanner found the RTC.
+    return rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire;
+#else
+    return Wire;
+#endif
+}
+
+// DS3231 stores time/date digits in packed BCD (e.g., 0x45 == decimal 45).
+// Convert from packed BCD register value to a normal integer.
+static uint8_t ds3231Bcd2bin(uint8_t packedBcdValue)
+{
+    uint8_t tens = (uint8_t)((packedBcdValue >> 4) & 0x0FU);
+    uint8_t ones = (uint8_t)(packedBcdValue & 0x0FU);
+    return (uint8_t)((tens * 10U) + ones);
+}
+
+// Convert from normal integer back to packed BCD for DS3231 writes.
+static uint8_t ds3231Bin2bcd(uint8_t decimalValue)
+{
+    uint8_t tens = (uint8_t)(decimalValue / 10U);
+    uint8_t ones = (uint8_t)(decimalValue % 10U);
+    return (uint8_t)((tens << 4) | ones);
+}
+
+static bool ds3231ReadTime(struct tm *calendarTime)
+{
+    // DS3231 calendar registers 0x00..0x06 are stored in this order:
+    // [0] = seconds (0-59, CH bit in bit7)
+    // [1] = minutes (0-59)
+    // [2] = hours (12h/24h format with mode bits)
+    // [3] = day of week (1-7)
+    // [4] = day of month (1-31)
+    // [5] = month (1-12, century bit in bit7)
+    // [6] = year (0-99)
+    uint8_t rtcRegisters[7];
+    TwoWire &i2cBus = ds3231Bus();
+    i2cBus.beginTransmission((uint8_t)DS3231_RTC);
+    i2cBus.write((uint8_t)0); // Start reading at register 0x00 (seconds).
+
+    // Repeated-start so we can issue read immediately after setting address pointer.
+    if (i2cBus.endTransmission(false) != 0)
+        return false;
+
+    size_t bytesRead = i2cBus.requestFrom((int)(uint8_t)DS3231_RTC, 7);
+    if (bytesRead != 7)
+        return false;
+
+    for (int registerIndex = 0; registerIndex < 7; registerIndex++) {
+        if (!i2cBus.available())
+            return false;
+        rtcRegisters[registerIndex] = (uint8_t)i2cBus.read();
+    }
+
+    // Seconds and minutes are BCD; mask out status bits before conversion.
+    calendarTime->tm_sec = ds3231Bcd2bin((uint8_t)(rtcRegisters[0] & 0x7FU));
+    calendarTime->tm_min = ds3231Bcd2bin((uint8_t)(rtcRegisters[1] & 0x7FU));
+
+    // Hours can be encoded in either 24-hour mode or 12-hour mode.
+    uint8_t hoursRegister = rtcRegisters[2];
+    bool is12HourMode = (hoursRegister & 0x40U) != 0;
+    if (is12HourMode) {
+        uint8_t hourIn12HourClock = ds3231Bcd2bin((uint8_t)(hoursRegister & 0x1FU));
+        bool isPm = (hoursRegister & 0x20U) != 0;
+
+        // Convert 12-hour encoding to 24-hour tm_hour convention.
+        if (isPm && hourIn12HourClock < 12)
+            hourIn12HourClock = (uint8_t)(hourIn12HourClock + 12U);
+        else if (!isPm && hourIn12HourClock == 12)
+            hourIn12HourClock = 0;
+
+        calendarTime->tm_hour = hourIn12HourClock;
+    } else {
+        calendarTime->tm_hour = ds3231Bcd2bin((uint8_t)(hoursRegister & 0x3FU));
+    }
+
+    // DS3231 day-of-week is 1..7; struct tm uses 0..6.
+    int dayOfWeekOneBased = ds3231Bcd2bin((uint8_t)(rtcRegisters[3] & 0x3FU));
+    if (dayOfWeekOneBased >= 1 && dayOfWeekOneBased <= 7)
+        calendarTime->tm_wday = dayOfWeekOneBased - 1;
+
+    calendarTime->tm_mday = ds3231Bcd2bin((uint8_t)(rtcRegisters[4] & 0x3FU));
+
+    uint8_t monthRegister = rtcRegisters[5];
+    calendarTime->tm_mon = ds3231Bcd2bin((uint8_t)(monthRegister & 0x1FU)) - 1; // tm_mon is 0-based.
+
+    int fullYear = 2000 + ds3231Bcd2bin(rtcRegisters[6]);
+    if (monthRegister & 0x80U)
+        fullYear += 100; // Century bit: 21xx when set.
+    calendarTime->tm_year = fullYear - 1900; // tm_year stores years since 1900.
+
+    return true;
+}
+
+static bool ds3231WriteTime(const struct tm *calendarTime)
+{
+    uint8_t rtcRegisters[7];
+
+    rtcRegisters[0] = ds3231Bin2bcd((uint8_t)calendarTime->tm_sec);
+    rtcRegisters[1] = ds3231Bin2bcd((uint8_t)calendarTime->tm_min);
+    rtcRegisters[2] = ds3231Bin2bcd((uint8_t)calendarTime->tm_hour); // write as 24-hour format
+
+    int weekdayZeroBased = calendarTime->tm_wday;
+    if (weekdayZeroBased < 0)
+        weekdayZeroBased = 0;
+    rtcRegisters[3] = ds3231Bin2bcd((uint8_t)(weekdayZeroBased + 1)); // DS3231 expects 1..7.
+
+    rtcRegisters[4] = ds3231Bin2bcd((uint8_t)calendarTime->tm_mday);
+
+    int fullYear = 1900 + calendarTime->tm_year;
+    uint8_t monthOneBased = (uint8_t)(calendarTime->tm_mon + 1);
+    uint8_t yearTwoDigits = (uint8_t)(fullYear % 100);
+
+    rtcRegisters[6] = ds3231Bin2bcd(yearTwoDigits);
+
+    uint8_t monthRegister = ds3231Bin2bcd(monthOneBased);
+    if (fullYear >= 2100)
+        monthRegister |= 0x80U; // Set century bit for 21xx.
+    rtcRegisters[5] = monthRegister;
+
+    TwoWire &i2cBus = ds3231Bus();
+    i2cBus.beginTransmission((uint8_t)DS3231_RTC);
+    i2cBus.write((uint8_t)0); // Start writing at register 0x00.
+    for (int registerIndex = 0; registerIndex < 7; registerIndex++)
+        i2cBus.write(rtcRegisters[registerIndex]);
+
+    return i2cBus.endTransmission() == 0;
+}
+#endif // DS3231_RTC
+
 static RTCQuality currentQuality = RTCQualityNone;
 uint32_t lastSetFromPhoneNtpOrGps = 0;
 
@@ -52,9 +187,10 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                         (long)printableEpoch, (long)BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
             }
-            return RTCSetResultInvalidTime;
         }
 #endif
 
@@ -93,15 +229,48 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
         if (tv.tv_sec < BUILD_EPOCH) {
             if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                         (long)printableEpoch, (long)BUILD_EPOCH);
                 lastTimeValidationWarning = millis();
             }
-            return RTCSetResultInvalidTime;
         }
 #endif
 
         LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
+        if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
+            currentQuality = RTCQualityDevice;
+        }
+        return RTCSetResultSuccess;
+    }
+#elif defined(DS3231_RTC)
+    if (rtc_found.address == DS3231_RTC) {
+        uint32_t now = millis();
+        struct tm t;
+        // Read DS3231 calendar fields into struct tm, then convert to Unix epoch
+        // so we can update system time via settimeofday(tv).
+        if (!ds3231ReadTime(&t))
+            return RTCSetResultNotSet;
+
+        // convert to unix seconds 
+        tv.tv_sec = gm_mktime(&t);
+        tv.tv_usec = 0;
+        uint32_t printableEpoch = tv.tv_sec;
+
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
+                LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                         (long)printableEpoch, (long)BUILD_EPOCH);
+                lastTimeValidationWarning = millis();
+            }
+        }
+#endif
+
+        LOG_DEBUG("Read RTC time from DS3231 as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
+                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, (long)printableEpoch);
         if (currentQuality == RTCQualityNone) {
             timeStartMsec = now;
             zeroOffsetSecs = tv.tv_sec;
@@ -128,10 +297,10 @@ RTCSetResult readFromRTC()
 #ifdef BUILD_EPOCH
             if (tv.tv_sec < BUILD_EPOCH) {
                 if (Throttle::isWithinTimespanMs(lastTimeValidationWarning, TIME_VALIDATION_WARNING_INTERVAL_MS) == false) {
-                    LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+                    LOG_WARN("RTC time (%ld) before build epoch (%ld); using for local clock until mesh/GPS/NTP sync",
+                             (long)printableEpoch, (long)BUILD_EPOCH);
                     lastTimeValidationWarning = millis();
                 }
-                return RTCSetResultInvalidTime;
             }
 #endif
             if (currentQuality == RTCQualityNone) {
@@ -246,6 +415,15 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+        }
+#elif defined(DS3231_RTC)
+        if (rtc_found.address == DS3231_RTC) {
+            tm *t = gmtime(&tv->tv_sec);
+            if (ds3231WriteTime(t))
+                LOG_DEBUG("DS3231_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                          t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
+            else
+                LOG_WARN("DS3231 I2C write failed");
         }
 #elif defined(RX8130CE_RTC)
         if (rtc_found.address == RX8130CE_RTC) {
