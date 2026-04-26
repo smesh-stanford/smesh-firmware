@@ -12,90 +12,132 @@
 static TwoWire &ds3231Bus()
 {
 #if WIRE_INTERFACES_COUNT == 2
+    // Use the I2C bus where the scanner found the RTC.
     return rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire;
 #else
     return Wire;
 #endif
 }
 
-static uint8_t ds3231Bcd2bin(uint8_t v)
+// DS3231 stores time/date digits in packed BCD (e.g., 0x45 == decimal 45).
+// Convert from packed BCD register value to a normal integer.
+static uint8_t ds3231Bcd2bin(uint8_t packedBcdValue)
 {
-    return (uint8_t)(((v >> 4) * 10U) + (v & 0x0FU));
+    uint8_t tens = (uint8_t)((packedBcdValue >> 4) & 0x0FU);
+    uint8_t ones = (uint8_t)(packedBcdValue & 0x0FU);
+    return (uint8_t)((tens * 10U) + ones);
 }
 
-static uint8_t ds3231Bin2bcd(uint8_t v)
+// Convert from normal integer back to packed BCD for DS3231 writes.
+static uint8_t ds3231Bin2bcd(uint8_t decimalValue)
 {
-    return (uint8_t)(((v / 10U) << 4) | (v % 10U));
+    uint8_t tens = (uint8_t)(decimalValue / 10U);
+    uint8_t ones = (uint8_t)(decimalValue % 10U);
+    return (uint8_t)((tens << 4) | ones);
 }
 
-static bool ds3231ReadTime(struct tm *t)
+static bool ds3231ReadTime(struct tm *calendarTime)
 {
-    uint8_t buf[7];
-    TwoWire &w = ds3231Bus();
-    w.beginTransmission((uint8_t)DS3231_RTC);
-    w.write((uint8_t)0);
-    if (w.endTransmission(false) != 0)
+    // DS3231 calendar registers 0x00..0x06 are stored in this order:
+    // [0] = seconds (0-59, CH bit in bit7)
+    // [1] = minutes (0-59)
+    // [2] = hours (12h/24h format with mode bits)
+    // [3] = day of week (1-7)
+    // [4] = day of month (1-31)
+    // [5] = month (1-12, century bit in bit7)
+    // [6] = year (0-99)
+    uint8_t rtcRegisters[7];
+    TwoWire &i2cBus = ds3231Bus();
+    i2cBus.beginTransmission((uint8_t)DS3231_RTC);
+    i2cBus.write((uint8_t)0); // Start reading at register 0x00 (seconds).
+
+    // Repeated-start so we can issue read immediately after setting address pointer.
+    if (i2cBus.endTransmission(false) != 0)
         return false;
-    size_t n = w.requestFrom((int)(uint8_t)DS3231_RTC, 7);
-    if (n != 7)
+
+    size_t bytesRead = i2cBus.requestFrom((int)(uint8_t)DS3231_RTC, 7);
+    if (bytesRead != 7)
         return false;
-    for (int i = 0; i < 7; i++) {
-        if (!w.available())
+
+    for (int registerIndex = 0; registerIndex < 7; registerIndex++) {
+        if (!i2cBus.available())
             return false;
-        buf[i] = (uint8_t)w.read();
+        rtcRegisters[registerIndex] = (uint8_t)i2cBus.read();
     }
-    t->tm_sec = ds3231Bcd2bin((uint8_t)(buf[0] & 0x7FU));
-    t->tm_min = ds3231Bcd2bin((uint8_t)(buf[1] & 0x7FU));
-    uint8_t hreg = buf[2];
-    if (hreg & 0x40U) {
-        uint8_t h12 = ds3231Bcd2bin((uint8_t)(hreg & 0x1FU));
-        bool pm = (hreg & 0x20U) != 0;
-        if (pm && h12 < 12)
-            h12 = (uint8_t)(h12 + 12U);
-        else if (!pm && h12 == 12)
-            h12 = 0;
-        t->tm_hour = h12;
+
+    // Seconds and minutes are BCD; mask out status bits before conversion.
+    calendarTime->tm_sec = ds3231Bcd2bin((uint8_t)(rtcRegisters[0] & 0x7FU));
+    calendarTime->tm_min = ds3231Bcd2bin((uint8_t)(rtcRegisters[1] & 0x7FU));
+
+    // Hours can be encoded in either 24-hour mode or 12-hour mode.
+    uint8_t hoursRegister = rtcRegisters[2];
+    bool is12HourMode = (hoursRegister & 0x40U) != 0;
+    if (is12HourMode) {
+        uint8_t hourIn12HourClock = ds3231Bcd2bin((uint8_t)(hoursRegister & 0x1FU));
+        bool isPm = (hoursRegister & 0x20U) != 0;
+
+        // Convert 12-hour encoding to 24-hour tm_hour convention.
+        if (isPm && hourIn12HourClock < 12)
+            hourIn12HourClock = (uint8_t)(hourIn12HourClock + 12U);
+        else if (!isPm && hourIn12HourClock == 12)
+            hourIn12HourClock = 0;
+
+        calendarTime->tm_hour = hourIn12HourClock;
     } else {
-        t->tm_hour = ds3231Bcd2bin((uint8_t)(hreg & 0x3FU));
+        calendarTime->tm_hour = ds3231Bcd2bin((uint8_t)(hoursRegister & 0x3FU));
     }
-    int dow1 = ds3231Bcd2bin((uint8_t)(buf[3] & 0x3FU));
-    if (dow1 >= 1 && dow1 <= 7)
-        t->tm_wday = dow1 - 1;
-    t->tm_mday = ds3231Bcd2bin((uint8_t)(buf[4] & 0x3FU));
-    uint8_t mreg = buf[5];
-    t->tm_mon = ds3231Bcd2bin((uint8_t)(mreg & 0x1FU)) - 1;
-    int y = 2000 + ds3231Bcd2bin(buf[6]);
-    if (mreg & 0x80U)
-        y += 100;
-    t->tm_year = y - 1900;
+
+    // DS3231 day-of-week is 1..7; struct tm uses 0..6.
+    int dayOfWeekOneBased = ds3231Bcd2bin((uint8_t)(rtcRegisters[3] & 0x3FU));
+    if (dayOfWeekOneBased >= 1 && dayOfWeekOneBased <= 7)
+        calendarTime->tm_wday = dayOfWeekOneBased - 1;
+
+    calendarTime->tm_mday = ds3231Bcd2bin((uint8_t)(rtcRegisters[4] & 0x3FU));
+
+    uint8_t monthRegister = rtcRegisters[5];
+    calendarTime->tm_mon = ds3231Bcd2bin((uint8_t)(monthRegister & 0x1FU)) - 1; // tm_mon is 0-based.
+
+    int fullYear = 2000 + ds3231Bcd2bin(rtcRegisters[6]);
+    if (monthRegister & 0x80U)
+        fullYear += 100; // Century bit: 21xx when set.
+    calendarTime->tm_year = fullYear - 1900; // tm_year stores years since 1900.
+
     return true;
 }
 
-static bool ds3231WriteTime(const struct tm *t)
+static bool ds3231WriteTime(const struct tm *calendarTime)
 {
-    uint8_t buf[7];
-    buf[0] = ds3231Bin2bcd((uint8_t)t->tm_sec);
-    buf[1] = ds3231Bin2bcd((uint8_t)t->tm_min);
-    buf[2] = ds3231Bin2bcd((uint8_t)t->tm_hour);
-    int wday = t->tm_wday;
-    if (wday < 0)
-        wday = 0;
-    buf[3] = ds3231Bin2bcd((uint8_t)(wday + 1));
-    buf[4] = ds3231Bin2bcd((uint8_t)t->tm_mday);
-    int calYear = 1900 + t->tm_year;
-    uint8_t y2 = (uint8_t)(calYear % 100);
-    uint8_t mon = (uint8_t)(t->tm_mon + 1);
-    buf[6] = ds3231Bin2bcd(y2);
-    uint8_t mreg = ds3231Bin2bcd(mon);
-    if (calYear >= 2100)
-        mreg |= 0x80U;
-    buf[5] = mreg;
-    TwoWire &w = ds3231Bus();
-    w.beginTransmission((uint8_t)DS3231_RTC);
-    w.write((uint8_t)0);
-    for (int i = 0; i < 7; i++)
-        w.write(buf[i]);
-    return w.endTransmission() == 0;
+    uint8_t rtcRegisters[7];
+
+    rtcRegisters[0] = ds3231Bin2bcd((uint8_t)calendarTime->tm_sec);
+    rtcRegisters[1] = ds3231Bin2bcd((uint8_t)calendarTime->tm_min);
+    rtcRegisters[2] = ds3231Bin2bcd((uint8_t)calendarTime->tm_hour); // write as 24-hour format
+
+    int weekdayZeroBased = calendarTime->tm_wday;
+    if (weekdayZeroBased < 0)
+        weekdayZeroBased = 0;
+    rtcRegisters[3] = ds3231Bin2bcd((uint8_t)(weekdayZeroBased + 1)); // DS3231 expects 1..7.
+
+    rtcRegisters[4] = ds3231Bin2bcd((uint8_t)calendarTime->tm_mday);
+
+    int fullYear = 1900 + calendarTime->tm_year;
+    uint8_t monthOneBased = (uint8_t)(calendarTime->tm_mon + 1);
+    uint8_t yearTwoDigits = (uint8_t)(fullYear % 100);
+
+    rtcRegisters[6] = ds3231Bin2bcd(yearTwoDigits);
+
+    uint8_t monthRegister = ds3231Bin2bcd(monthOneBased);
+    if (fullYear >= 2100)
+        monthRegister |= 0x80U; // Set century bit for 21xx.
+    rtcRegisters[5] = monthRegister;
+
+    TwoWire &i2cBus = ds3231Bus();
+    i2cBus.beginTransmission((uint8_t)DS3231_RTC);
+    i2cBus.write((uint8_t)0); // Start writing at register 0x00.
+    for (int registerIndex = 0; registerIndex < 7; registerIndex++)
+        i2cBus.write(rtcRegisters[registerIndex]);
+
+    return i2cBus.endTransmission() == 0;
 }
 #endif // DS3231_RTC
 
@@ -207,9 +249,12 @@ RTCSetResult readFromRTC()
     if (rtc_found.address == DS3231_RTC) {
         uint32_t now = millis();
         struct tm t;
+        // Read DS3231 calendar fields into struct tm, then convert to Unix epoch
+        // so we can update system time via settimeofday(tv).
         if (!ds3231ReadTime(&t))
             return RTCSetResultNotSet;
 
+        // convert to unix seconds 
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         uint32_t printableEpoch = tv.tv_sec;
