@@ -388,29 +388,30 @@ static bool sdWithLockAndRetry(const char *path, bool tryLock, unsigned maxAttem
     if (SD.cardType() == CARD_NONE)
         return false;
 
-    if (tryLock) {
-        if (!spiLock->try_lock())
-            return false;
-    } else {
-        spiLock->lock();
-    }
-
     bool ok = false;
     for (unsigned attempt = 0; attempt < maxAttempts; attempt++) {
         if (attempt > 0)
             delay(retryGapMs);
 
+        if (tryLock) {
+            // Avoid deadlock when logging from code paths that already hold spiLock.
+            if (!spiLock->try_lock())
+                continue;
+        } else {
+            spiLock->lock();
+        }
+
         sdEnsureParentDir(path);
         File f = SD.open(path, FILE_APPEND);
-        if (!f)
-            continue;
-        ok = writeFn(f, writeContext);
-        f.close();
+        if (f) {
+            ok = writeFn(f, writeContext);
+            f.close();
+        }
+        spiLock->unlock();
+
         if (ok)
             break;
     }
-
-    spiLock->unlock();
     return ok;
 }
 
@@ -465,7 +466,7 @@ bool sdCardAppendLine(const char *path, const char *line, bool tryLock)
 bool sdCardAppendLineCritical(const char *path, const char *line)
 {
     SdLineWriteContext context = {line};
-    return sdWithLockAndRetry(path, false, SD_APPEND_CRITICAL_MAX_ATTEMPTS, SD_APPEND_CRITICAL_RETRY_GAP_MS,
+    return sdWithLockAndRetry(path, true, SD_APPEND_CRITICAL_MAX_ATTEMPTS, SD_APPEND_CRITICAL_RETRY_GAP_MS,
                               sdWriteSingleLine, &context);
 }
 
