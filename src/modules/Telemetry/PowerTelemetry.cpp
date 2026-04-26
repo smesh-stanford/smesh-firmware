@@ -14,6 +14,7 @@
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
+#include "smesh_sd_card.h"
 #include "target_specific.h"
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -172,6 +173,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_power_metrics_tag) {
+        smesh_sd_log_received_telemetry(&mp, t);
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 

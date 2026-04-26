@@ -12,6 +12,7 @@
 #include "Router.h"
 #include "detect/ScanI2CTwoWire.h"
 #include "main.h"
+#include "smesh_sd_card.h"
 #include <Throttle.h>
 
 #ifndef PMSA003I_WARMUP_MS
@@ -127,6 +128,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
+        smesh_sd_log_received_telemetry(&mp, t);
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 

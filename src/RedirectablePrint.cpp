@@ -342,15 +342,19 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
 #if defined(ARCH_ESP32) && defined(HAS_SDCARD) && defined(SMESH_HELTEC_V3_SD) && !defined(SDCARD_USE_SOFT_SPI)
         {
-            // arbitrarily picked 384 but this is hopefully enough for most log messages
-            // if we notice clipping of logs, this is likely the culprit
-            char sdBuf[384];
-            va_list arg_sd;
-            va_copy(arg_sd, arg);
-            int n = vsnprintf(sdBuf, sizeof(sdBuf), newFormat, arg_sd);
-            va_end(arg_sd);
-            if (n > 0)
-                smesh_sd_append_log_line(sdBuf);
+            bool writeWarnOrError = strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0 ||
+                                    strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0 ||
+                                    strcmp(logLevel, MESHTASTIC_LOG_LEVEL_CRIT) == 0;
+            if (writeWarnOrError) {
+                // SD mirror for actionable logs only (warn/error/critical).
+                char sdBuf[384];
+                va_list arg_sd;
+                va_copy(arg_sd, arg);
+                int n = vsnprintf(sdBuf, sizeof(sdBuf), newFormat, arg_sd);
+                va_end(arg_sd);
+                if (n > 0)
+                    smesh_sd_append_warn_error_line(logLevel, sdBuf);
+            }
         }
 #endif
 

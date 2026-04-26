@@ -10,6 +10,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "memGet.h"
+#include "smesh_sd_card.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <meshUtils.h>
@@ -45,6 +46,7 @@ int32_t DeviceTelemetryModule::runOnce()
 bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
+        smesh_sd_log_received_telemetry(&mp, t);
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
