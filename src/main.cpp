@@ -669,8 +669,8 @@ void setup()
     (void)readFromRTC();
     if (rtc_found.address != DS3231_RTC) {
         LOG_WARN(
-            "SMesh: DS3231 not detected at I2C 0x68 on Wire1 (SDA=GPIO41, SCL=GPIO42). Check RTC wiring, 3V3, GND, and that the "
-            "module is a DS3231 (0x68), not only AT24C32 EEPROM (0x57). Logs may show ??:??:?? and SD uses boot_* until sync.");
+            "SMesh: DS3231 not detected at I2C 0x68 on Wire1 (SDA=GPIO41, SCL=GPIO42). Check RTC wiring, 3V3, and GND. "
+            "Logs may show ??:??:?? and SD uses boot_* until sync.");
     } else {
         LOG_INFO("SMesh: DS3231 RTC found at 0x68 on Wire1");
     }
