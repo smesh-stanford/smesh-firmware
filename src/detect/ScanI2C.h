@@ -65,7 +65,6 @@ class ScanI2C
         ICM20948,
         SCD4X,
         MAX30102,
-        AT24C32,
         TPS65233,
         MPR121KB,
         CGRADSENS,
