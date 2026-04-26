@@ -15,6 +15,7 @@ class ScanI2C
         RTC_RV3028,
         RTC_PCF8563,
         RTC_RX8130CE,
+        RTC_DS3231,
         CARDKB,
         TDECKKB,
         BBQ10KB,

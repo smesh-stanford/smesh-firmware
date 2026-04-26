@@ -664,6 +664,18 @@ void setup()
     auto rtc_info = i2cScanner->firstRTC();
     rtc_found = rtc_info.type != ScanI2C::DeviceType::NONE ? rtc_info.address : rtc_found;
 
+#if defined(SMESH_HELTEC_V3_SD) && defined(DS3231_RTC)
+    // Apply external RTC before SD log session; tzset() runs later — readFromRTC() is safe to call twice.
+    (void)readFromRTC();
+    if (rtc_found.address != DS3231_RTC) {
+        LOG_WARN(
+            "SMesh: DS3231 not detected at I2C 0x68 on Wire1 (SDA=GPIO41, SCL=GPIO42). Check RTC wiring, 3V3, and GND. "
+            "Logs may show ??:??:?? and SD uses boot_* until sync.");
+    } else {
+        LOG_INFO("SMesh: DS3231 RTC found at 0x68 on Wire1");
+    }
+#endif
+
     auto kb_info = i2cScanner->firstKeyboard();
 
     if (kb_info.type != ScanI2C::DeviceType::NONE) {

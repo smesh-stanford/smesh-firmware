@@ -9,7 +9,7 @@
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
 #define SPI_SCK (19)
-#define SPI_MISO (33)
+#define SPI_MISO (34)
 #define SPI_MOSI (26)
 #define SPI_CS (47)
 #define SDCARD_CS SPI_CS
