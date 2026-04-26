@@ -403,13 +403,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("MAX30102", (uint8_t)addr.address);
                     break;
                 }
-#ifdef AT24C32_EEPROM
-                if ((uint8_t)addr.address == (uint8_t)AT24C32_EEPROM) {
-                    type = AT24C32;
-                    logFoundDevice("AT24C32", (uint8_t)addr.address);
-                    break;
-                }
-#endif
                 type = RCWL9620;
                 logFoundDevice("RCWL9620", (uint8_t)addr.address);
                 break;
