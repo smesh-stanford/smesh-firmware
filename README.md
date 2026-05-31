@@ -32,6 +32,8 @@ Meshtastic enables text messaging, location sharing, and telemetry over a decent
 ## Config setup
 Upon boot, the firmware has SMesh's custom configuration set in `smesh_defaults.h`. This sets things like enabling environmental sensors, etc. and is baked into the firmware.
 
+For the most recent code, ensure you are checked out to the `develop` branch on this repo.
+
 Also, when uploading the firmware, ensure you do the following in platformio:
 1. PlatformIO: Pick project environment
 2. Select smesh-heltec-v3
