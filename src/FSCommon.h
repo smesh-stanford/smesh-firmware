@@ -60,6 +60,10 @@ void setupSDCard();
 #if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 /** Append a line to a file on the SD volume (same SPI lock as setupSDCard). If tryLock, skip when the lock is busy. */
 bool sdCardAppendLine(const char *path, const char *line, bool tryLock);
+/** Append a line for high-priority logs (blocking lock + stronger retry budget). */
+bool sdCardAppendLineCritical(const char *path, const char *line);
+/** Append one CSV row, writing header first if file is new. */
+bool sdCardAppendCsvRow(const char *path, const char *headerLine, const char *rowLine, bool tryLock);
 /** Write a fixed smoke line and read it back (blocking spiLock). */
 bool sdCardSmokeTest(const char *path, char *readBack, size_t readBackBytes);
 #endif

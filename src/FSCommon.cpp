@@ -36,6 +36,12 @@ SPIClass SPI_HSPI(HSPI);
 #ifndef SD_APPEND_RETRY_GAP_MS
 #define SD_APPEND_RETRY_GAP_MS 15U
 #endif
+#ifndef SD_APPEND_CRITICAL_MAX_ATTEMPTS
+#define SD_APPEND_CRITICAL_MAX_ATTEMPTS 8U
+#endif
+#ifndef SD_APPEND_CRITICAL_RETRY_GAP_MS
+#define SD_APPEND_CRITICAL_RETRY_GAP_MS 25U
+#endif
 
 #endif // HAS_SDCARD
 
@@ -372,40 +378,102 @@ static void sdEnsureParentDir(const char *path)
         SD.mkdir(dir);
 }
 
-bool sdCardAppendLine(const char *path, const char *line, bool tryLock)
+typedef bool (*SdAppendWriteFn)(File &file, const void *context);
+
+static bool sdWithLockAndRetry(const char *path, bool tryLock, unsigned maxAttempts, unsigned retryGapMs, SdAppendWriteFn writeFn,
+                               const void *writeContext)
 {
-    if (!path || !line || !line[0])
+    if (!path || !writeFn || maxAttempts == 0)
         return false;
     if (SD.cardType() == CARD_NONE)
         return false;
 
-    if (tryLock) {
-        if (!spiLock->try_lock())
-            return false;
-    } else {
-        spiLock->lock();
-    }
-
     bool ok = false;
-    for (unsigned attempt = 0; attempt < SD_APPEND_MAX_ATTEMPTS; attempt++) {
+    for (unsigned attempt = 0; attempt < maxAttempts; attempt++) {
         if (attempt > 0)
-            delay(SD_APPEND_RETRY_GAP_MS);
+            delay(retryGapMs);
+
+        if (tryLock) {
+            // Avoid deadlock when logging from code paths that already hold spiLock.
+            if (!spiLock->try_lock())
+                continue;
+        } else {
+            spiLock->lock();
+        }
 
         sdEnsureParentDir(path);
         File f = SD.open(path, FILE_APPEND);
-        if (!f)
-            continue;
-        f.print(line);
-        size_t len = strlen(line);
-        if (len == 0 || line[len - 1] != '\n')
-            f.println();
-        f.close();
-        ok = true;
-        break;
+        if (f) {
+            ok = writeFn(f, writeContext);
+            f.close();
+        }
+        spiLock->unlock();
+
+        if (ok)
+            break;
+    }
+    return ok;
+}
+
+struct SdLineWriteContext {
+    const char *line;
+};
+
+static bool sdWriteSingleLine(File &file, const void *context)
+{
+    const auto *lineContext = static_cast<const SdLineWriteContext *>(context);
+    if (!lineContext || !lineContext->line || !lineContext->line[0])
+        return false;
+
+    file.print(lineContext->line);
+    size_t len = strlen(lineContext->line);
+    if (len == 0 || lineContext->line[len - 1] != '\n')
+        file.println();
+    return true;
+}
+
+struct SdCsvWriteContext {
+    const char *headerLine;
+    const char *rowLine;
+};
+
+static bool sdWriteCsvRow(File &file, const void *context)
+{
+    const auto *csvContext = static_cast<const SdCsvWriteContext *>(context);
+    if (!csvContext || !csvContext->headerLine || !csvContext->rowLine || !csvContext->headerLine[0] || !csvContext->rowLine[0])
+        return false;
+
+    if (file.size() == 0) {
+        file.print(csvContext->headerLine);
+        size_t headerLen = strlen(csvContext->headerLine);
+        if (headerLen == 0 || csvContext->headerLine[headerLen - 1] != '\n')
+            file.println();
     }
 
-    spiLock->unlock();
-    return ok;
+    file.print(csvContext->rowLine);
+    size_t rowLen = strlen(csvContext->rowLine);
+    if (rowLen == 0 || csvContext->rowLine[rowLen - 1] != '\n')
+        file.println();
+    return true;
+}
+
+bool sdCardAppendLine(const char *path, const char *line, bool tryLock)
+{
+    SdLineWriteContext context = {line};
+    return sdWithLockAndRetry(path, tryLock, SD_APPEND_MAX_ATTEMPTS, SD_APPEND_RETRY_GAP_MS, sdWriteSingleLine, &context);
+}
+
+bool sdCardAppendLineCritical(const char *path, const char *line)
+{
+    SdLineWriteContext context = {line};
+    return sdWithLockAndRetry(path, true, SD_APPEND_CRITICAL_MAX_ATTEMPTS, SD_APPEND_CRITICAL_RETRY_GAP_MS,
+                              sdWriteSingleLine, &context);
+}
+
+bool sdCardAppendCsvRow(const char *path, const char *headerLine, const char *rowLine, bool tryLock)
+{
+    SdCsvWriteContext context = {headerLine, rowLine};
+    return sdWithLockAndRetry(path, tryLock, SD_APPEND_MAX_ATTEMPTS, SD_APPEND_RETRY_GAP_MS, sdWriteCsvRow, &context);
 }
 
 bool sdCardSmokeTest(const char *path, char *readBack, size_t readBackBytes)
